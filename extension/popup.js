@@ -1331,12 +1331,25 @@ async function handleStartSync() {
     if (spinnerIcon) spinnerIcon.className = 'sync-spinner-icon';
     if (statusHeader) statusHeader.textContent = t('sync_success');
     if (stepDetail) {
-      stepDetail.textContent = getLang() === 'vi' 
-        ? `✓ Hoàn tất! Đã làm sạch ${result.clearedCount || 0} lớp cũ & đồng bộ ${result.insertedCount} lớp từ Cổng Đào Tạo.` 
-        : `✓ Done! Cleared ${result.clearedCount || 0} old classes & synced ${result.insertedCount} classes from portal.`;
+      if (result.insertedCount === 0 && result.updatedCount === 0 && (result.clearedCount === 0 || !result.clearedCount) && result.skippedCount > 0) {
+        stepDetail.textContent = getLang() === 'vi' 
+          ? `✓ Thời khóa biểu đã chính xác, không cần đồng bộ lại (${result.skippedCount} tiết học đã chuẩn).` 
+          : `✓ Schedule is already up to date (${result.skippedCount} classes verified).`;
+      } else {
+        const parts = [];
+        if (result.insertedCount > 0) parts.push(getLang() === 'vi' ? `${result.insertedCount} mới` : `${result.insertedCount} new`);
+        if (result.updatedCount > 0) parts.push(getLang() === 'vi' ? `${result.updatedCount} cập nhật` : `${result.updatedCount} updated`);
+        if (result.clearedCount > 0) parts.push(getLang() === 'vi' ? `${result.clearedCount} đã xóa` : `${result.clearedCount} cleared`);
+        if (result.skippedCount > 0) parts.push(getLang() === 'vi' ? `${result.skippedCount} giữ nguyên` : `${result.skippedCount} unchanged`);
+        
+        stepDetail.textContent = getLang() === 'vi' 
+          ? `✓ Hoàn tất! ${parts.join(', ')}.` 
+          : `✓ Done! ${parts.join(', ')}.`;
+      }
     }
     if (counterLabel && result.total > 0) {
-      counterLabel.textContent = `${result.insertedCount} / ${result.total}`;
+      const processed = result.insertedCount + result.updatedCount + result.skippedCount;
+      counterLabel.textContent = `${processed} / ${result.total}`;
     }
 
     // Update stats
@@ -1346,7 +1359,7 @@ async function handleStartSync() {
     const elClash = document.getElementById('stat_clashes');
 
     if (elIns) elIns.textContent = result.insertedCount;
-    if (elUpd) elUpd.textContent = result.clearedCount ?? result.updatedCount ?? 0;
+    if (elUpd) elUpd.textContent = (result.updatedCount || 0) + (result.clearedCount || 0);
     if (elSkip) elSkip.textContent = result.skippedCount;
     if (elClash) elClash.textContent = result.clashesCount;
 

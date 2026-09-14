@@ -75,7 +75,7 @@ export function getLocalVersion() {
   } catch (e) {
     // ignore
   }
-  return '1.3.2';
+  return '1.4.0';
 }
 
 /**

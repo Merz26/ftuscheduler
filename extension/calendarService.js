@@ -21,14 +21,14 @@ function setStoredMockCalendars(val) {
   }
 }
 
-function getStoredMockEvents() {
+export function getStoredMockEvents() {
   if (typeof localStorage !== 'undefined') {
     try { return JSON.parse(localStorage.getItem('mockGoogleEvents') || '{}'); } catch(e) {}
   }
   return inMemoryEvents;
 }
 
-function setStoredMockEvents(val) {
+export function setStoredMockEvents(val) {
   inMemoryEvents = val;
   if (typeof localStorage !== 'undefined') {
     try { localStorage.setItem('mockGoogleEvents', JSON.stringify(val)); } catch(e) {}
@@ -476,7 +476,7 @@ export function extractCourseCode(text) {
  * Matches candidate class against existing Google Calendar events.
  * Ignores any cancelled or deleted events so removed items can be re-synced!
  */
-export function findMatchingCalendarEvent(candidate, existingEvents) {
+export function findMatchingCalendarEvent(candidate, existingEvents, excludedEventIds = new Set()) {
   const { dateStr, startTimeStr, endTimeStr, courseCode, id_tkb, summary } = candidate;
   const candStartMin = timeStringToMinutes(startTimeStr);
   const candEndMin = timeStringToMinutes(endTimeStr);
@@ -488,10 +488,11 @@ export function findMatchingCalendarEvent(candidate, existingEvents) {
   for (const ev of existingEvents) {
     // If an event was deleted/cancelled in Google Calendar, it MUST NOT match!
     if (!ev || ev.status === 'cancelled') continue;
+    if (excludedEventIds && excludedEventIds.has(ev.id)) continue;
 
     const evStartRaw = ev.start?.dateTime || ev.start?.date || '';
     const evEndRaw = ev.end?.dateTime || ev.end?.date || '';
-    const evDate = evStartRaw.split('T')[0];
+    const evDate = normalizeIsoDate(evStartRaw.split('T')[0]);
 
     // Check same calendar day
     if (evDate !== dateStr) continue;
@@ -544,6 +545,99 @@ export function findMatchingCalendarEvent(candidate, existingEvents) {
     matchedEvent: exactMatch || codeMatch,
     clashEvent
   };
+}
+
+/**
+ * Verifies if an existing Google Calendar event is completely up to date with candidate portal class data.
+ * Checks start time, end time, location, summary, color, and description details.
+ * Returns true if NO modification is required (100% up to date), allowing sync to skip without network writes.
+ */
+export function isEventAlreadyCorrect(ev, expected) {
+  if (!ev || ev.status === 'cancelled') return false;
+
+  // 1. Check start and end timestamps (within 60s tolerance for ISO timezone representation variants)
+  const evStartRaw = ev.start?.dateTime || ev.start?.date || '';
+  const evEndRaw = ev.end?.dateTime || ev.end?.date || '';
+  const evStartMs = new Date(evStartRaw).getTime();
+  const expStartMs = new Date(expected.startDateTime).getTime();
+  const evEndMs = new Date(evEndRaw).getTime();
+  const expEndMs = new Date(expected.endDateTime).getTime();
+
+  if (isNaN(evStartMs) || isNaN(expStartMs) || Math.abs(evStartMs - expStartMs) > 60000) {
+    return false;
+  }
+  if (isNaN(evEndMs) || isNaN(expEndMs) || Math.abs(evEndMs - expEndMs) > 60000) {
+    return false;
+  }
+
+  // 2. Location comparison (e.g. classroom changes from B201 to B205)
+  const evLoc = (ev.location || '').trim();
+  const expLoc = (expected.location || '').trim();
+  if (evLoc !== expLoc) {
+    return false;
+  }
+
+  // 3. Summary comparison (course title, course code, makeup designation)
+  const evSum = (ev.summary || '').trim();
+  const expSum = (expected.summary || '').trim();
+  if (evSum !== expSum) {
+    return false;
+  }
+
+  // 4. Color ID comparison (standard color 9 vs makeup color 11)
+  if (expected.colorId && ev.colorId && String(ev.colorId) !== String(expected.colorId)) {
+    return false;
+  }
+
+  // 5. Description verification: check teacher and classroom markers
+  const evDesc = ev.description || '';
+  if (expected.teacher && expected.teacher !== 'Chưa cập nhật' && !evDesc.includes(expected.teacher)) {
+    return false;
+  }
+  if (expected.room && !evDesc.includes(expected.room)) {
+    return false;
+  }
+  if (expected.id_tkb && !evDesc.includes(expected.id_tkb)) {
+    const privTkb = ev.extendedProperties?.private?.id_tkb;
+    if (privTkb && String(privTkb) !== String(expected.id_tkb)) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
+/**
+ * Concurrency worker pool: executes an array of async task functions with a bounded concurrency limit.
+ * Optimizes network throughput and sync speed while preventing Google API 429 rate limit exceptions.
+ */
+export async function runWithConcurrency(tasks, limit = 4, onItemComplete = null) {
+  if (!tasks || tasks.length === 0) return [];
+  const results = [];
+  const executing = new Set();
+  let completed = 0;
+
+  for (let i = 0; i < tasks.length; i++) {
+    const task = tasks[i];
+    const p = Promise.resolve().then(async () => {
+      const res = await task();
+      completed++;
+      if (typeof onItemComplete === 'function') {
+        onItemComplete(completed, tasks.length, res);
+      }
+      return res;
+    });
+    results.push(p);
+    executing.add(p);
+    const clean = () => executing.delete(p);
+    p.then(clean, clean);
+
+    if (executing.size >= limit) {
+      await Promise.race(executing);
+    }
+  }
+
+  return Promise.all(results);
 }
 
 function timeStringToMinutes(timeStr) {
@@ -651,9 +745,15 @@ export function isFtuClassEvent(ev) {
 }
 
 /**
- * Synchronizes class schedules to Google Calendar.
- * For every sync attempt, it clears out every class of the target week from the calendar
- * before syncing that week back with the authoritative data from the portal.
+ * Synchronizes class schedules to Google Calendar with Intelligent Differential Reconciliation.
+ * - Compares portal classes with existing calendar events.
+ * - If an item is already correct (matching date, periods, room, course, teacher), it is SKIPPED (0 write calls).
+ * - If details changed (e.g. room update, makeup status), it is patched directly via PATCH.
+ * - If a class is newly scheduled, it is inserted via POST.
+ * - If an FTU class was dropped/cancelled in the portal for this week, it is cleared via DELETE.
+ * - Personal events (dentist, meetings, etc.) are strictly preserved.
+ * - Multiple write operations execute through a bounded concurrency pool (4x faster).
+ * - Multi-week scopes use consolidated date range fetching (1 query instead of N).
  *
  * Supported scopes:
  * - 'this_week': Current active week
@@ -724,85 +824,68 @@ export async function syncScheduleToGoogleCalendar(token, scheduleData, options 
     totalCandidateClasses += (w.ds_thoi_khoa_bieu || w.ds_tkb || w.tkb || []).length;
   });
 
+  // STEP 3: Consolidated Fast Fetch across entire target date range (massive speedup!)
+  let overallMin = null;
+  let overallMax = null;
+
+  for (const w of targetWeeks) {
+    const bounds = getWeekDateBounds(w);
+    if (bounds) {
+      if (!overallMin || bounds.queryMin < overallMin) overallMin = bounds.queryMin;
+      if (!overallMax || bounds.queryMax > overallMax) overallMax = bounds.queryMax;
+    }
+  }
+
+  if (onProgress) {
+    onProgress({
+      phase: 'fetching',
+      current: 0,
+      total: totalCandidateClasses,
+      percent: 15,
+      message: `Đang kiểm tra lịch hiện tại trên Google Calendar...`
+    });
+  }
+
+  let allExistingEvents = [];
+  if (overallMin && overallMax) {
+    try {
+      allExistingEvents = await fetchGoogleEvents(token, overallMin, overallMax, calendarId);
+    } catch (fetchErr) {
+      console.warn('[Sync] Error fetching existing events:', fetchErr);
+      allExistingEvents = [];
+    }
+  }
+
   let clearedCount = 0;
   let insertedCount = 0;
+  let updatedCount = 0;
+  let skippedCount = 0;
   let clashesCount = 0;
   const changes = [];
 
-  const totalSteps = targetWeeks.length * 2; // Step 1: Clear week, Step 2: Sync week
-  let currentStep = 0;
+  const totalWeeks = targetWeeks.length;
 
-  // Process each target week: Clear existing classes -> Sync back from portal
+  // Process each target week using Intelligent Differential Reconciliation
   for (let wIdx = 0; wIdx < targetWeeks.length; wIdx++) {
     const week = targetWeeks[wIdx];
     const weekLabel = week.tuan_hoc ? `Tuần ${week.tuan_hoc}` : `Tuần ${wIdx + 1}`;
     const weekClasses = week.ds_thoi_khoa_bieu || week.ds_tkb || week.tkb || [];
-
-    // STEP A: Calculate date bounds for the target week
     const bounds = getWeekDateBounds(week);
 
-    // STEP B: Clear out every class of the target week from Google Calendar
-    if (bounds) {
-      currentStep++;
-      const clearPercent = Math.min(95, Math.round((currentStep / totalSteps) * 85));
+    if (!bounds) continue;
 
-      if (onProgress) {
-        onProgress({
-          phase: 'clearing',
-          current: insertedCount,
-          total: totalCandidateClasses,
-          percent: clearPercent,
-          message: `[${weekLabel}] Đang xóa sạch lớp cũ trên lịch (${bounds.mondayIso} - ${bounds.sundayIso})...`
-        });
-      }
+    // Filter existing calendar events strictly for this week's Monday-to-Sunday boundary
+    const weekExistingEvents = allExistingEvents.filter(ev => {
+      if (!ev || ev.status === 'cancelled') return false;
+      const evStart = ev.start?.dateTime || ev.start?.date || '';
+      const evDate = normalizeIsoDate(evStart.split('T')[0]);
+      return evDate >= bounds.mondayIso && evDate <= bounds.sundayIso;
+    });
 
-      // Query existing calendar events across this target week's window
-      const weekExistingEvents = await fetchGoogleEvents(token, bounds.queryMin, bounds.queryMax, calendarId);
+    const matchedExistingEventIds = new Set();
+    const weekWriteTasks = [];
 
-      // Filter events belonging strictly to this week's 7 calendar days that are university classes
-      const weekClassesToDelete = weekExistingEvents.filter(ev => {
-        if (!ev || ev.status === 'cancelled') return false;
-        const evStart = ev.start?.dateTime || ev.start?.date || '';
-        const evDate = normalizeIsoDate(evStart.split('T')[0]);
-        if (evDate < bounds.mondayIso || evDate > bounds.sundayIso) return false;
-        return isFtuClassEvent(ev);
-      });
-
-      for (const ev of weekClassesToDelete) {
-        try {
-          await deleteGoogleEvent(token, ev.id, calendarId);
-          clearedCount++;
-          changes.push({
-            type: 'cleared',
-            subject: ev.summary || 'Lớp học',
-            time: normalizeIsoDate((ev.start?.dateTime || ev.start?.date || '').split('T')[0]),
-            reason: `Đã xóa lớp cũ của ${weekLabel}`
-          });
-        } catch (delErr) {
-          console.warn('[Sync] Could not delete old class event:', ev.id, delErr);
-        }
-      }
-    }
-
-    // Micro-delay in studio mock mode to ensure realistic, smooth visual progress
-    if (token && token.startsWith('ya29.studio_')) {
-      await new Promise(r => setTimeout(r, 20));
-    }
-
-    // STEP C: Sync that week back with the authoritative data from the portal
-    currentStep++;
-    const syncWeekPercent = Math.min(95, Math.round((currentStep / totalSteps) * 85));
-
-    if (onProgress) {
-      onProgress({
-        phase: 'syncing',
-        current: insertedCount,
-        total: totalCandidateClasses,
-        percent: syncWeekPercent,
-        message: `[${weekLabel}] Đang đồng bộ ${weekClasses.length} lớp học từ Cổng Đào Tạo...`
-      });
-    }
-
+    // Evaluate each portal class against existing calendar events
     for (let cIdx = 0; cIdx < weekClasses.length; cIdx++) {
       const item = weekClasses[cIdx];
       const startPeriod = Number(item.tiet_bat_dau) || 1;
@@ -877,25 +960,131 @@ export async function syncScheduleToGoogleCalendar(token, scheduleData, options 
         });
       }
 
-      // Insert clean event for this target week
-      await insertGoogleEvent(token, eventPayload, calendarId);
-      insertedCount++;
-      changes.push({
-        type: 'inserted',
-        subject: item.ten_mon,
-        room: item.ma_phong,
-        time: `${dateStr} ${startTimeStr}`
-      });
+      // Match candidate against existing calendar events (excluding already matched)
+      const candidateInfo = {
+        dateStr,
+        startTimeStr,
+        endTimeStr,
+        courseCode,
+        id_tkb: item.id_tkb,
+        summary
+      };
 
-      if (onProgress) {
-        onProgress({
-          phase: 'syncing',
-          current: insertedCount,
-          total: totalCandidateClasses,
-          percent: Math.min(98, syncWeekPercent + Math.round(((cIdx + 1) / weekClasses.length) * (85 / totalSteps))),
+      const { matchedEvent, clashEvent } = findMatchingCalendarEvent(candidateInfo, weekExistingEvents, matchedExistingEventIds);
+
+      if (clashEvent && !internalClash) {
+        clashesCount++;
+        changes.push({
+          type: 'clash',
+          subject: item.ten_mon,
+          clashWith: clashEvent.summary,
+          time: `${dateStr} ${startTimeStr}`
+        });
+      }
+
+      const expectedValidation = {
+        startDateTime,
+        endDateTime,
+        location: expectedLocation,
+        summary,
+        colorId: eventPayload.colorId,
+        teacher: item.ten_giang_vien,
+        room: item.ma_phong,
+        id_tkb: item.id_tkb ? String(item.id_tkb) : null
+      };
+
+      if (matchedEvent) {
+        matchedExistingEventIds.add(matchedEvent.id);
+
+        if (isEventAlreadyCorrect(matchedEvent, expectedValidation)) {
+          // 🚀 OPTIMIZATION: Already completely correct! Do NOT resync!
+          skippedCount++;
+          changes.push({
+            type: 'skipped',
+            subject: item.ten_mon,
+            room: item.ma_phong,
+            time: `${dateStr} ${startTimeStr}`,
+            reason: 'Đã chính xác, không cần đồng bộ lại'
+          });
+        } else {
+          // Needs update (e.g. room changed from B201 to B205, teacher updated, makeup changed)
+          updatedCount++;
+          changes.push({
+            type: 'updated',
+            subject: item.ten_mon,
+            room: item.ma_phong,
+            time: `${dateStr} ${startTimeStr}`,
+            reason: `Cập nhật thông tin lớp (Phòng: ${item.ma_phong || 'Chưa xếp'})`
+          });
+          weekWriteTasks.push(async () => {
+            return await patchGoogleEvent(token, matchedEvent.id, eventPayload, calendarId);
+          });
+        }
+      } else {
+        // Brand new class: Insert
+        insertedCount++;
+        changes.push({
+          type: 'inserted',
           subject: item.ten_mon,
           room: item.ma_phong,
-          message: `[${weekLabel}] Đang chèn: ${item.ten_mon}`
+          time: `${dateStr} ${startTimeStr}`
+        });
+        weekWriteTasks.push(async () => {
+          return await insertGoogleEvent(token, eventPayload, calendarId);
+        });
+      }
+    }
+
+    // Clean up orphaned FTU university classes from this week
+    // (Classes that were on the calendar but are no longer in the portal for this week)
+    const orphanedClasses = weekExistingEvents.filter(ev => {
+      if (!ev || ev.status === 'cancelled') return false;
+      if (matchedExistingEventIds.has(ev.id)) return false;
+      return isFtuClassEvent(ev);
+    });
+
+    for (const orphan of orphanedClasses) {
+      clearedCount++;
+      changes.push({
+        type: 'cleared',
+        subject: orphan.summary || 'Lớp học',
+        time: normalizeIsoDate((orphan.start?.dateTime || orphan.start?.date || '').split('T')[0]),
+        reason: 'Lớp đã bị hủy hoặc chuyển tuần trên cổng đào tạo'
+      });
+      weekWriteTasks.push(async () => {
+        try {
+          return await deleteGoogleEvent(token, orphan.id, calendarId);
+        } catch (delErr) {
+          console.warn('[Sync] Could not delete orphaned class:', orphan.id, delErr);
+        }
+      });
+    }
+
+    // Execute write operations using concurrency pool (limit 4) for optimal speed
+    if (weekWriteTasks.length > 0) {
+      const basePercent = 20 + Math.round((wIdx / totalWeeks) * 70);
+      await runWithConcurrency(weekWriteTasks, 4, (done, total) => {
+        if (onProgress) {
+          const writePercent = Math.min(96, basePercent + Math.round((done / total) * (70 / totalWeeks)));
+          onProgress({
+            phase: 'syncing',
+            current: insertedCount + updatedCount,
+            total: totalCandidateClasses,
+            percent: writePercent,
+            message: `[${weekLabel}] Đang cập nhật ${done}/${total} thay đổi...`
+          });
+        }
+      });
+    } else {
+      // 0 write tasks! All items in this week were already correct!
+      if (onProgress) {
+        const weekDonePercent = 20 + Math.round(((wIdx + 1) / totalWeeks) * 75);
+        onProgress({
+          phase: 'syncing',
+          current: insertedCount + updatedCount,
+          total: totalCandidateClasses,
+          percent: weekDonePercent,
+          message: `[${weekLabel}] Tất cả lớp học đã chính xác (0 thay đổi).`
         });
       }
     }
@@ -904,7 +1093,7 @@ export async function syncScheduleToGoogleCalendar(token, scheduleData, options 
   if (onProgress) {
     onProgress({
       phase: 'completed',
-      current: insertedCount,
+      current: insertedCount + updatedCount,
       total: totalCandidateClasses,
       percent: 100,
       message: 'Đồng bộ hoàn tất thành công!'
@@ -916,8 +1105,8 @@ export async function syncScheduleToGoogleCalendar(token, scheduleData, options 
     dateStr: new Date().toISOString(),
     clearedCount,
     insertedCount,
-    updatedCount: 0,
-    skippedCount: 0,
+    updatedCount,
+    skippedCount,
     clashesCount,
     total: totalCandidateClasses,
     scope
@@ -940,8 +1129,8 @@ export async function syncScheduleToGoogleCalendar(token, scheduleData, options 
     calendarId,
     clearedCount,
     insertedCount,
-    updatedCount: 0,
-    skippedCount: 0,
+    updatedCount,
+    skippedCount,
     clashesCount,
     total: totalCandidateClasses,
     changes,

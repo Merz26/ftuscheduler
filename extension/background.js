@@ -175,14 +175,16 @@ async function runScheduledBackgroundSync() {
       activeWeekIndex: 0
     });
 
-    // Notify user of successful background update
-    if (syncResult && (syncResult.insertedCount > 0 || syncResult.updatedCount > 0)) {
+    // Notify user of background update if changes occurred
+    if (syncResult && (syncResult.insertedCount > 0 || syncResult.updatedCount > 0 || syncResult.clearedCount > 0)) {
       chrome.notifications.create({
         type: 'basic',
         iconUrl: 'icon.png',
         title: 'FTU Schedule Sync',
-        message: `Tự động đồng bộ: ${syncResult.insertedCount} tiết mới, ${syncResult.updatedCount} cập nhật phòng học.`
+        message: `Tự động đồng bộ: ${syncResult.insertedCount} mới, ${syncResult.updatedCount} cập nhật, ${syncResult.clearedCount} đã xóa (${syncResult.skippedCount} giữ nguyên).`
       });
+    } else if (syncResult && syncResult.skippedCount > 0) {
+      console.log(`[Background Sync] All ${syncResult.skippedCount} classes are already up to date. No calendar writes needed.`);
     }
 
     return syncResult;

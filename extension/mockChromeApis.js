@@ -39,7 +39,7 @@
   const mockRuntime = {
     __isMock: true,
     getManifest: () => ({
-      version: '1.3.2',
+      version: '1.4.0',
       oauth2: {
         client_id: '1068393903577-5g3l76neofv7fgdtkshfpcqcf9rprh1n.apps.googleusercontent.com',
         scopes: [
