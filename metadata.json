@@ -1,6 +1,6 @@
 {
   "name": "FTU Schedule Sync",
-  "description": "Chrome extension to synchronize FTU university schedules (/tkb-tuan) with Google Calendar.",
+  "description": "Chrome extension to synchronize FTU university class schedules and exam schedules with Google Calendar.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

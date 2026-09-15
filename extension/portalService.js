@@ -478,3 +478,406 @@ export async function savePortalCredentials(studentId, password) {
   });
 }
 
+/**
+ * Parses Vietnamese date format DD/MM/YYYY into ISO YYYY-MM-DD
+ */
+export function parseVnDateToIso(dateStr) {
+  if (!dateStr) return '';
+  const parts = String(dateStr).trim().split('/');
+  if (parts.length === 3) {
+    const [d, m, y] = parts;
+    return `${y.padStart(4, '2000')}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`;
+  }
+  return dateStr;
+}
+
+/**
+ * Computes exam end time in HH:mm format given start time and duration in minutes
+ */
+export function calculateExamEndTime(startTimeStr, durationMinutes) {
+  if (!startTimeStr) return '';
+  const [hStr, mStr] = String(startTimeStr).split(':');
+  const h = Number(hStr) || 0;
+  const m = Number(mStr) || 0;
+  const duration = Number(durationMinutes) || 90;
+  const totalMin = h * 60 + m + duration;
+  const endH = Math.floor(totalMin / 60) % 24;
+  const endM = totalMin % 60;
+  return `${String(endH).padStart(2, '0')}:${String(endM).padStart(2, '0')}`;
+}
+
+/**
+ * Fetches available semesters for student exam schedule
+ * Endpoint: POST /api/report/w-locdshockylichthisinhvien
+ */
+export async function getExamSemesters(token) {
+  const { res } = await fetchWithAutoRelogin(`${BASE_URL}/api/report/w-locdshockylichthisinhvien`, {
+    filter: { is_tieng_anh: null },
+    additional: {
+      paging: { limit: 100, page: 1 },
+      ordering: [{ name: null, order_type: 1 }]
+    }
+  }, token);
+
+  if (!res.ok) throw new Error(`Không thể lấy danh sách học kỳ lịch thi (HTTP ${res.status})`);
+  const json = await res.json();
+  const list = json.data?.ds_hoc_ky || json.data?.list_hoc_ky || [];
+  return list.map(item => ({
+    hoc_ky: item.hoc_ky,
+    ten_hoc_ky: item.ten_hoc_ky || `Học kỳ ${item.hoc_ky}`,
+    ngay_bat_dau_hk: item.ngay_bat_dau_hk || '',
+    ngay_ket_thuc_hk: item.ngay_ket_thuc_hk || ''
+  }));
+}
+
+/**
+ * Fetches exam schedule for a specific semester and exam type (Final: is_giua_ky = false, Midterm: is_giua_ky = true)
+ * Endpoint: POST /api/epm/w-locdslichthisvtheohocky
+ */
+export async function getExamSchedule(token, hoc_ky, is_giua_ky = false) {
+  const { res } = await fetchWithAutoRelogin(`${BASE_URL}/api/epm/w-locdslichthisvtheohocky`, {
+    filter: {
+      hoc_ky: hoc_ky ? Number(hoc_ky) : null,
+      is_giua_ky: Boolean(is_giua_ky)
+    },
+    additional: {
+      paging: { limit: 100, page: 1 },
+      ordering: [{ name: null, order_type: null }]
+    }
+  }, token);
+
+  if (!res.ok) throw new Error(`Không thể lấy lịch thi từ Cổng Đào Tạo (HTTP ${res.status})`);
+  const json = await res.json();
+  const rawList = json.data?.ds_lich_thi || [];
+  const postponedList = json.data?.ds_lich_hoan_thi || [];
+  const tuitionNotice = json.data?.thong_bao_no_hoc_phi || '';
+
+  const normalized = rawList.map((item, idx) => {
+    const isoDate = parseVnDateToIso(item.ngay_thi);
+    const startTime = item.gio_bat_dau || '07:30';
+    const duration = Number(item.so_phut) || 90;
+    const endTime = calculateExamEndTime(startTime, duration);
+    const startDateTime = isoDate ? `${isoDate}T${startTime}:00+07:00` : '';
+    const endDateTime = isoDate ? `${isoDate}T${endTime}:00+07:00` : '';
+
+    return {
+      id_nhom_thi: item.id_nhom_thi || `exam_${idx}_${item.ma_mon}`,
+      id_mon_hoc: item.id_mon_hoc,
+      so_thu_tu: item.so_thu_tu || idx + 1,
+      ma_mon: item.ma_mon || 'CHƯA_CÓ_MÃ',
+      ten_mon: item.ten_mon || 'Môn thi',
+      ten_mon_eg: item.ten_mon_eg || '',
+      ngay_thi: item.ngay_thi,
+      iso_date: isoDate,
+      gio_bat_dau: startTime,
+      gio_ket_thuc: endTime,
+      so_phut: duration,
+      tiet_bat_dau: Number(item.tiet_bat_dau) || 1,
+      so_tiet: Number(item.so_tiet) || 3,
+      ma_phong: item.ma_phong || 'Chưa xếp phòng',
+      dia_diem_thi: item.dia_diem_thi || item.ma_phong || 'CS2',
+      so_bao_danh: item.so_bao_danh || '',
+      to_thi: item.to_thi || '',
+      nhom_thi: item.nhom_thi || '',
+      hinh_thuc_thi: item.hinh_thuc_thi || 'Thi viết',
+      ky_thi: item.ky_thi || (is_giua_ky ? 'Thi giữa kỳ' : 'Thi kết thúc môn'),
+      dot_thi: item.dot_thi || '',
+      si_so: Number(item.si_so) || 0,
+      ghi_chu_sv: item.ghi_chu_sv || '',
+      ghi_chu_htt: item.ghi_chu_htt || '',
+      cam_thi: item.cam_thi || '',
+      is_giua_ky: Boolean(is_giua_ky),
+      startDateTime,
+      endDateTime
+    };
+  });
+
+  return {
+    exams: normalized,
+    postponed: postponedList,
+    tuitionNotice,
+    total: normalized.length
+  };
+}
+
+/**
+ * Fetches all exams (both Cuối kỳ and Giữa kỳ) for a semester, sorted chronologically
+ */
+export async function getAllExamSchedules(token, hoc_ky) {
+  const [finalRes, midRes] = await Promise.all([
+    getExamSchedule(token, hoc_ky, false).catch(err => {
+      console.warn('[Exam API] Error fetching final exams:', err);
+      return { exams: [], total: 0 };
+    }),
+    getExamSchedule(token, hoc_ky, true).catch(err => {
+      console.warn('[Exam API] Error fetching midterm exams:', err);
+      return { exams: [], total: 0 };
+    })
+  ]);
+
+  const combined = [
+    ...finalRes.exams.map(e => ({ ...e, loai_ky_thi: 'Cuối kỳ' })),
+    ...midRes.exams.map(e => ({ ...e, loai_ky_thi: 'Giữa kỳ' }))
+  ];
+
+  // Sort chronologically by date and start time
+  combined.sort((a, b) => {
+    const keyA = `${a.iso_date || '9999'} ${a.gio_bat_dau || '00:00'}`;
+    const keyB = `${b.iso_date || '9999'} ${b.gio_bat_dau || '00:00'}`;
+    return keyA.localeCompare(keyB);
+  });
+
+  return {
+    exams: combined,
+    finalCount: finalRes.total,
+    midCount: midRes.total,
+    total: combined.length,
+    tuitionNotice: finalRes.tuitionNotice || midRes.tuitionNotice || ''
+  };
+}
+
+/**
+ * High-level fetcher: Authenticates or uses token to fetch all exam info from /#/lichthi
+ */
+export async function fetchLichThiFromPortal(credentials = null, requestedHocKy = null) {
+  let token = null;
+  let profile = null;
+
+  if (credentials && credentials.studentId && credentials.password) {
+    const loginResult = await loginToPortal(credentials.studentId, credentials.password);
+    if (!loginResult.success) {
+      throw new Error(loginResult.error || 'Đăng nhập thất bại');
+    }
+    token = loginResult.token;
+    profile = loginResult.profile;
+  } else {
+    const session = await getSessionToken();
+    if (!session.success || !session.token) {
+      throw new Error(session.error || 'Chưa đăng nhập Cổng Đào Tạo FTU');
+    }
+    token = session.token;
+    profile = session.profile;
+  }
+
+  const semesters = await getExamSemesters(token);
+  const targetHocKy = requestedHocKy || (semesters.length > 0 ? semesters[0].hoc_ky : 20261);
+  const semesterInfo = semesters.find(s => s.hoc_ky === Number(targetHocKy)) || semesters[0];
+
+  const examData = await getAllExamSchedules(token, targetHocKy);
+
+  return {
+    success: true,
+    studentProfile: profile,
+    semesters,
+    activeSemester: semesterInfo,
+    exams: examData.exams,
+    total: examData.total,
+    finalCount: examData.finalCount,
+    midCount: examData.midCount,
+    tuitionNotice: examData.tuitionNotice
+  };
+}
+
+/**
+ * Tests direct connectivity to /#/lichthi API endpoints
+ */
+export async function verifyLichThiAccess(token) {
+  const startTime = Date.now();
+  try {
+    const semesters = await getExamSemesters(token);
+    const targetHocKy = semesters.length > 0 ? semesters[0].hoc_ky : null;
+    const examData = targetHocKy ? await getExamSchedule(token, targetHocKy, false) : { exams: [], total: 0 };
+    const latency = Date.now() - startTime;
+    return {
+      success: true,
+      latency,
+      semesterCount: semesters.length,
+      examCount: examData.total,
+      sampleSemester: semesters[0]?.ten_hoc_ky || 'N/A'
+    };
+  } catch (err) {
+    return {
+      success: false,
+      latency: Date.now() - startTime,
+      error: err.message
+    };
+  }
+}
+
+/**
+ * Realistic default exams for offline preview or unauthenticated display
+ */
+export function generateDefaultFtuExams() {
+  return [
+    {
+      id_nhom_thi: 'ex_default_1',
+      so_thu_tu: 1,
+      ma_mon: 'ESP341',
+      ten_mon: 'Tiếng Anh chuyên ngành 4 (Thư tín thương mại)',
+      ten_mon_eg: 'English for Specific Purpose 4',
+      ngay_thi: '05/10/2026',
+      iso_date: '2026-10-05',
+      gio_bat_dau: '15:30',
+      gio_ket_thuc: '17:00',
+      so_phut: 90,
+      tiet_bat_dau: 18,
+      so_tiet: 3,
+      ma_phong: 'CS2.A205',
+      dia_diem_thi: 'CS2.A205',
+      so_bao_danh: '015',
+      to_thi: '003',
+      hinh_thuc_thi: 'Tự luận',
+      ky_thi: 'Thi kết thúc môn',
+      loai_ky_thi: 'Cuối kỳ',
+      dot_thi: 'D1',
+      si_so: 37,
+      is_giua_ky: false
+    },
+    {
+      id_nhom_thi: 'ex_default_2',
+      so_thu_tu: 2,
+      ma_mon: 'KTE306',
+      ten_mon: 'Quan hệ kinh tế quốc tế',
+      ten_mon_eg: 'International Economic Relations',
+      ngay_thi: '09/10/2026',
+      iso_date: '2026-10-09',
+      gio_bat_dau: '13:30',
+      gio_ket_thuc: '15:00',
+      so_phut: 90,
+      tiet_bat_dau: 14,
+      so_tiet: 3,
+      ma_phong: 'CS2.B301',
+      dia_diem_thi: 'CS2.B301',
+      so_bao_danh: '028',
+      to_thi: '002',
+      hinh_thuc_thi: 'Tiểu Luận cá nhân',
+      ky_thi: 'Thi kết thúc môn',
+      loai_ky_thi: 'Cuối kỳ',
+      dot_thi: 'D1',
+      si_so: 48,
+      is_giua_ky: false
+    },
+    {
+      id_nhom_thi: 'ex_default_3',
+      so_thu_tu: 3,
+      ma_mon: 'TMA408',
+      ten_mon: 'Sở hữu trí tuệ',
+      ten_mon_eg: 'Intellectual Property',
+      ngay_thi: '13/10/2026',
+      iso_date: '2026-10-13',
+      gio_bat_dau: '07:30',
+      gio_ket_thuc: '09:00',
+      so_phut: 90,
+      tiet_bat_dau: 2,
+      so_tiet: 3,
+      ma_phong: 'CS2.A306',
+      dia_diem_thi: 'CS2.A306',
+      so_bao_danh: '012',
+      to_thi: '002',
+      hinh_thuc_thi: 'Thi kết hợp trắc nghiệm trên giấy và tự luận',
+      ky_thi: 'Thi kết thúc môn',
+      loai_ky_thi: 'Cuối kỳ',
+      dot_thi: 'D1',
+      si_so: 39,
+      is_giua_ky: false
+    },
+    {
+      id_nhom_thi: 'ex_default_4',
+      so_thu_tu: 4,
+      ma_mon: 'MKT401',
+      ten_mon: 'Marketing quốc tế',
+      ten_mon_eg: 'International Marketing',
+      ngay_thi: '19/10/2026',
+      iso_date: '2026-10-19',
+      gio_bat_dau: '15:30',
+      gio_ket_thuc: '17:00',
+      so_phut: 90,
+      tiet_bat_dau: 18,
+      so_tiet: 3,
+      ma_phong: 'CS2.A403',
+      dia_diem_thi: 'CS2.A403',
+      so_bao_danh: '019',
+      to_thi: '003',
+      hinh_thuc_thi: 'Thi kết hợp trắc nghiệm trên giấy và tự luận',
+      ky_thi: 'Thi kết thúc môn',
+      loai_ky_thi: 'Cuối kỳ',
+      dot_thi: 'D1',
+      si_so: 37,
+      is_giua_ky: false
+    },
+    {
+      id_nhom_thi: 'ex_default_5',
+      so_thu_tu: 5,
+      ma_mon: 'TMA302',
+      ten_mon: 'Giao dịch thương mại quốc tế',
+      ten_mon_eg: 'International Trade Transactions',
+      ngay_thi: '23/12/2026',
+      iso_date: '2026-12-23',
+      gio_bat_dau: '13:30',
+      gio_ket_thuc: '16:30',
+      so_phut: 180,
+      tiet_bat_dau: 14,
+      so_tiet: 6,
+      ma_phong: 'CS2.B401',
+      dia_diem_thi: 'CS2.B401',
+      so_bao_danh: '022',
+      to_thi: '002',
+      hinh_thuc_thi: 'Vấn đáp',
+      ky_thi: 'Thi kết thúc môn',
+      loai_ky_thi: 'Cuối kỳ',
+      dot_thi: 'D2',
+      si_so: 50,
+      is_giua_ky: false
+    },
+    {
+      id_nhom_thi: 'ex_default_6',
+      so_thu_tu: 6,
+      ma_mon: 'TMA301',
+      ten_mon: 'Chính sách thương mại quốc tế',
+      ten_mon_eg: 'International Trade Policy',
+      ngay_thi: '04/01/2027',
+      iso_date: '2027-01-04',
+      gio_bat_dau: '09:30',
+      gio_ket_thuc: '11:00',
+      so_phut: 90,
+      tiet_bat_dau: 6,
+      so_tiet: 3,
+      ma_phong: 'CS2.B402',
+      dia_diem_thi: 'CS2.B402',
+      so_bao_danh: '008',
+      to_thi: '002',
+      hinh_thuc_thi: 'Thi viết',
+      ky_thi: 'Thi kết thúc môn',
+      loai_ky_thi: 'Cuối kỳ',
+      dot_thi: 'D2',
+      si_so: 49,
+      is_giua_ky: false
+    },
+    {
+      id_nhom_thi: 'ex_default_7',
+      so_thu_tu: 7,
+      ma_mon: 'ESP451',
+      ten_mon: 'Tiếng Anh chuyên ngành 5 (Diễn thuyết trước công chúng)',
+      ten_mon_eg: 'English for Specific Purpose 5 (Public Speaking)',
+      ngay_thi: '09/01/2027',
+      iso_date: '2027-01-09',
+      gio_bat_dau: '07:30',
+      gio_ket_thuc: '10:30',
+      so_phut: 180,
+      tiet_bat_dau: 2,
+      so_tiet: 6,
+      ma_phong: 'CS2.B501',
+      dia_diem_thi: 'CS2.B501',
+      so_bao_danh: '031',
+      to_thi: '002',
+      hinh_thuc_thi: 'Vấn đáp',
+      ky_thi: 'Thi kết thúc môn',
+      loai_ky_thi: 'Cuối kỳ',
+      dot_thi: 'D2',
+      si_so: 52,
+      is_giua_ky: false
+    }
+  ];
+}
+
+

@@ -13,19 +13,7 @@
     return;
   }
 
-  // Ensure no pre-baked test credentials
-  try {
-    if (localStorage.getItem('studentId') === JSON.stringify('2415115057')) {
-      localStorage.removeItem('studentId');
-      localStorage.removeItem('password');
-      localStorage.removeItem('portalToken');
-      localStorage.removeItem('portalTokenExpiresAt');
-      localStorage.removeItem('portalVerification');
-      localStorage.removeItem('studentProfile');
-    }
-  } catch (e) {
-    console.warn('[Mock] localStorage check failed:', e);
-  }
+  // Interactive environment initialization
 
   function safeParse(val, fallback) {
     if (val === null || val === undefined) return fallback;

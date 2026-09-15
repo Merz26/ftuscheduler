@@ -324,10 +324,16 @@ export async function checkAuth() {
   });
 }
 
-export async function getOrCreateFtuCalendar(token) {
+/**
+ * Finds an existing calendar by summary or creates a new secondary calendar with the given summary and description.
+ * Returns the calendar ID string (e.g. 'xxxx@group.calendar.google.com' or 'primary').
+ */
+export async function findOrCreateScheduleCalendar(token, summary = 'FTU Schedule', description = '', storageKey = null) {
+  const cacheKey = storageKey || `calId_${summary.replace(/[^a-zA-Z0-9]/g, '_')}`;
+
   const cachedCalId = await new Promise((resolve) => {
     if (typeof chrome !== 'undefined' && chrome.storage?.local) {
-      chrome.storage.local.get(['ftuCalendarId'], (res) => resolve(res.ftuCalendarId || null));
+      chrome.storage.local.get([cacheKey], (res) => resolve(res[cacheKey] || null));
     } else {
       resolve(null);
     }
@@ -340,11 +346,11 @@ export async function getOrCreateFtuCalendar(token) {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (checkRes.ok) {
-        return { calendarId: cachedCalId, calendarName: 'FTU Schedule', isSecondary: true };
+        return cachedCalId;
       } else {
-        console.warn('[Google Calendar] Cached calendar ID is no longer valid or was deleted. Clearing cached ID.');
+        console.warn(`[Google Calendar] Cached calendar ID for ${summary} is no longer valid or was deleted. Clearing cached ID.`);
         if (typeof chrome !== 'undefined' && chrome.storage?.local) {
-          chrome.storage.local.remove(['ftuCalendarId']);
+          chrome.storage.local.remove([cacheKey]);
         }
       }
     } catch (e) {
@@ -359,12 +365,12 @@ export async function getOrCreateFtuCalendar(token) {
 
     if (listRes.ok) {
       const listData = await listRes.json();
-      const existing = (listData.items || []).find(c => c.summary === 'FTU Schedule');
+      const existing = (listData.items || []).find(c => c.summary === summary);
       if (existing) {
         if (typeof chrome !== 'undefined' && chrome.storage?.local) {
-          chrome.storage.local.set({ ftuCalendarId: existing.id });
+          chrome.storage.local.set({ [cacheKey]: existing.id });
         }
-        return { calendarId: existing.id, calendarName: 'FTU Schedule', isSecondary: true };
+        return existing.id;
       }
     }
 
@@ -375,8 +381,8 @@ export async function getOrCreateFtuCalendar(token) {
         'Content-Type': 'application/json'
       },
       body: JSON.stringify({
-        summary: 'FTU Schedule',
-        description: 'Thời khóa biểu Trường Đại học Ngoại Thương (FTU) được đồng bộ tự động',
+        summary,
+        description: description || `${summary} - Tự động đồng bộ từ Cổng Đào Tạo FTU`,
         timeZone: 'Asia/Ho_Chi_Minh'
       })
     });
@@ -384,15 +390,33 @@ export async function getOrCreateFtuCalendar(token) {
     if (createRes.ok) {
       const created = await createRes.json();
       if (typeof chrome !== 'undefined' && chrome.storage?.local) {
-        chrome.storage.local.set({ ftuCalendarId: created.id });
+        chrome.storage.local.set({ [cacheKey]: created.id });
       }
-      return { calendarId: created.id, calendarName: 'FTU Schedule', isSecondary: true };
+      return created.id;
     }
   } catch (err) {
-    console.warn('[Google Calendar] Secondary calendar creation failed. Falling back to primary:', err);
+    console.warn(`[Google Calendar] Secondary calendar creation for "${summary}" failed. Falling back to primary:`, err);
   }
 
-  return { calendarId: 'primary', calendarName: 'Primary (FTU Schedule)', isSecondary: false };
+  return 'primary';
+}
+
+// Aliases for backward compatibility and alternate naming
+export const createOrScheduleCalendar = findOrCreateScheduleCalendar;
+export const getOrCreateScheduleCalendar = findOrCreateScheduleCalendar;
+
+export async function getOrCreateFtuCalendar(token) {
+  const calId = await findOrCreateScheduleCalendar(
+    token,
+    'FTU Schedule',
+    'Thời khóa biểu Trường Đại học Ngoại Thương (FTU) được đồng bộ tự động',
+    'ftuCalendarId'
+  );
+  return {
+    calendarId: calId,
+    calendarName: calId === 'primary' ? 'Primary (FTU Schedule)' : 'FTU Schedule',
+    isSecondary: calId !== 'primary'
+  };
 }
 
 export async function fetchGoogleEvents(token, timeMin, timeMax, calendarId = 'primary') {
@@ -442,6 +466,20 @@ export async function deleteGoogleEvent(token, eventId, calendarId = 'primary') 
   });
   if (!res.ok && res.status !== 404) throw new Error(`Failed to delete event (HTTP ${res.status})`);
   return true;
+}
+
+/**
+ * Lists all events in a specified calendar within a wide window (-6 months to +12 months).
+ */
+export async function listAllFtuCalendarEvents(token, calendarId = 'primary', timeMin = null, timeMax = null) {
+  const min = timeMin || new Date(Date.now() - 180 * 24 * 60 * 60 * 1000);
+  const max = timeMax || new Date(Date.now() + 365 * 24 * 60 * 60 * 1000);
+  try {
+    return await fetchGoogleEvents(token, min, max, calendarId);
+  } catch (err) {
+    console.warn('[CalendarService] Error listing events:', err);
+    return [];
+  }
 }
 
 export const PERIOD_TIMES = {
@@ -1231,3 +1269,150 @@ export async function cleanCalendarDuplicates(token, calendarId = 'primary', opt
     removedCount
   };
 }
+
+/**
+ * Synchronizes Exam Schedules (Lịch thi) to Google Calendar with Intelligent Differential Reconciliation
+ * Applies high-priority Flamingo color and automatic 24h & 2h reminders.
+ */
+export async function syncExamsToGoogleCalendar(token, examsList, options = {}) {
+  const {
+    calendarId: userCalId,
+    onProgress,
+    reminders = [
+      { method: 'popup', minutes: 1440 }, // 1 day before
+      { method: 'popup', minutes: 120 }   // 2 hours before
+    ]
+  } = options;
+
+  if (!token) throw new Error('Yêu cầu token xác thực Google Calendar');
+  if (!Array.isArray(examsList) || examsList.length === 0) {
+    return { success: true, inserted: 0, updated: 0, skipped: 0, total: 0 };
+  }
+
+  if (onProgress) {
+    onProgress({ phase: 'initializing', percent: 10, message: 'Đang chuẩn bị lịch thi Google Calendar...' });
+  }
+
+  // Use designated calendar or target FTU Exam Calendar
+  let targetCalId = userCalId;
+  if (!targetCalId) {
+    targetCalId = await findOrCreateScheduleCalendar(
+      token, 
+      'Lịch thi FTU', 
+      'Lịch thi sinh viên Trường Đại học Ngoại thương (CS2) - Tự động đồng bộ từ Cổng Đào Tạo'
+    );
+  }
+
+  if (onProgress) {
+    onProgress({ phase: 'scanning', percent: 30, message: 'Đang đối soát lịch thi hiện tại...' });
+  }
+
+  const existingEvents = await listAllFtuCalendarEvents(token, targetCalId);
+
+  let inserted = 0;
+  let updated = 0;
+  let skipped = 0;
+
+  for (let i = 0; i < examsList.length; i++) {
+    const exam = examsList[i];
+    const progressPct = Math.min(95, 30 + Math.round(((i + 1) / examsList.length) * 65));
+    
+    if (onProgress) {
+      onProgress({
+        phase: 'syncing',
+        percent: progressPct,
+        message: `Đang đồng bộ môn thi ${i + 1}/${examsList.length}: ${exam.ma_mon}`
+      });
+    }
+
+    const summary = `[THI] ${exam.ten_mon} (${exam.ma_mon})`;
+    const location = `${exam.dia_diem_thi || exam.ma_phong || 'CS2'} - FTU CS2`;
+    
+    const description = [
+      `📚 Môn thi: ${exam.ten_mon}`,
+      `📌 Mã môn: ${exam.ma_mon}`,
+      `📅 Ngày thi: ${exam.ngay_thi}`,
+      `⏰ Giờ thi: ${exam.gio_bat_dau} - ${exam.gio_ket_thuc} (${exam.so_phut} phút, Tiết ${exam.tiet_bat_dau})`,
+      `🏫 Phòng thi: ${exam.ma_phong} (Địa điểm: ${exam.dia_diem_thi || 'CS2'})`,
+      `🎫 Số báo danh (SBD): ${exam.so_bao_danh || 'Chưa xếp SBD'}`,
+      `👥 Tổ thi: ${exam.to_thi || 'N/A'} | Đợt: ${exam.dot_thi || 'D1'} | Sĩ số: ${exam.si_so || 'N/A'}`,
+      `📝 Hình thức thi: ${exam.hinh_thuc_thi}`,
+      `🎯 Kỳ thi: ${exam.ky_thi || exam.loai_ky_thi || 'Thi kết thúc môn'}`,
+      exam.ghi_chu_sv ? `⚠️ Ghi chú: ${exam.ghi_chu_sv}` : '',
+      `\n⚠️ Lưu ý: Thí sinh có mặt trước giờ thi 15 phút, mang theo Thẻ sinh viên và CCCD.`
+    ].filter(Boolean).join('\n');
+
+    const expectedProperties = {
+      app: 'ftu-calendar-sync',
+      type: 'exam',
+      ma_mon: String(exam.ma_mon),
+      ngay_thi: String(exam.ngay_thi),
+      iso_date: String(exam.iso_date),
+      ma_phong: String(exam.ma_phong),
+      to_thi: String(exam.to_thi || '')
+    };
+
+    const eventPayload = {
+      summary,
+      location,
+      description,
+      start: { dateTime: exam.startDateTime, timeZone: 'Asia/Ho_Chi_Minh' },
+      end: { dateTime: exam.endDateTime, timeZone: 'Asia/Ho_Chi_Minh' },
+      colorId: '11', // Flamingo (Red) for prominent exam alerts
+      reminders: {
+        useDefault: false,
+        overrides: reminders
+      },
+      extendedProperties: {
+        private: expectedProperties
+      }
+    };
+
+    // Check if matching event already exists
+    const match = existingEvents.find(ev => {
+      const p = ev.extendedProperties?.private;
+      if (p && p.type === 'exam') {
+        return p.ma_mon === String(exam.ma_mon) && p.ngay_thi === String(exam.ngay_thi);
+      }
+      return ev.summary === summary && ev.start?.dateTime?.startsWith(exam.iso_date);
+    });
+
+    if (match) {
+      // Check if perfectly correct
+      const isCorrect = 
+        match.summary === summary &&
+        match.location === location &&
+        match.start?.dateTime === exam.startDateTime &&
+        match.end?.dateTime === exam.endDateTime &&
+        match.description === description;
+
+      if (isCorrect) {
+        skipped++;
+      } else {
+        await patchGoogleEvent(token, match.id, eventPayload, targetCalId);
+        updated++;
+      }
+    } else {
+      await insertGoogleEvent(token, eventPayload, targetCalId);
+      inserted++;
+    }
+  }
+
+  if (onProgress) {
+    onProgress({
+      phase: 'completed',
+      percent: 100,
+      message: `Đồng bộ lịch thi hoàn tất: Thêm mới ${inserted}, Cập nhật ${updated}, Giữ nguyên ${skipped}`
+    });
+  }
+
+  return {
+    success: true,
+    calendarId: targetCalId,
+    inserted,
+    updated,
+    skipped,
+    total: examsList.length
+  };
+}
+

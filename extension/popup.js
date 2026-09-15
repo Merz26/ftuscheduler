@@ -6,7 +6,13 @@ import {
   savePortalCredentials, 
   getStoredPortalCredentials,
   portalLogin,
-  generateDefaultFtuSchedule
+  generateDefaultFtuSchedule,
+  getExamSemesters,
+  getExamSchedule,
+  getAllExamSchedules,
+  fetchLichThiFromPortal,
+  verifyLichThiAccess,
+  generateDefaultFtuExams
 } from './portalService.js';
 
 import { 
@@ -14,6 +20,7 @@ import {
   logoutGoogle, 
   checkAuth, 
   syncScheduleToGoogleCalendar, 
+  syncExamsToGoogleCalendar,
   cleanCalendarDuplicates,
   PERIOD_TIMES,
   extractCourseCode
@@ -51,7 +58,7 @@ import {
 // Global state in popup session
 let state = {
   activeView: 'view_schedule',
-  scheduleSubView: 'day', // 'day' | 'week'
+  scheduleSubView: 'day', // 'day' | 'week' | 'exams'
   googleAccount: null,
   portalToken: null,
   portalProfile: null,
@@ -64,7 +71,13 @@ let state = {
   lastSyncTimestamp: null,
   lastSyncInfo: null,
   updateInfo: null,
-  optOutUpdates: false
+  optOutUpdates: false,
+  // Exam schedule state
+  examSemesters: [],
+  selectedExamSemester: null,
+  examFilter: 'all', // 'all' | 'final' | 'mid'
+  examSchedule: [],
+  examTuitionNotice: ''
 };
 
 /**
@@ -330,6 +343,19 @@ async function loadStoredPreferences() {
           state.lastSyncInfo = res.lastSyncInfo;
         }
         updateLastSyncIndicator('idle', state.lastSyncTimestamp, state.lastSyncInfo);
+
+        // Restore cached exam schedule if available
+        if (res.cachedExams && Array.isArray(res.cachedExams) && res.cachedExams.length > 0) {
+          state.examSchedule = res.cachedExams;
+          if (res.examSemesters) state.examSemesters = res.examSemesters;
+          if (res.examTuitionNotice) state.examTuitionNotice = res.examTuitionNotice;
+          const badgeExam = document.getElementById('badge_exam_count');
+          if (badgeExam) {
+            badgeExam.textContent = state.examSchedule.length;
+            badgeExam.style.display = 'inline-block';
+          }
+          renderExamCards();
+        }
       } catch (err) {
         console.warn('Error applying stored preferences:', err);
       }
@@ -350,7 +376,10 @@ async function loadStoredPreferences() {
           'cachedSchedule',
           'semesterInfo',
           'lastSyncTimestamp',
-          'lastSyncInfo'
+          'lastSyncInfo',
+          'cachedExams',
+          'examSemesters',
+          'examTuitionNotice'
         ], applyData);
       } catch (e) {
         applyData({});
@@ -778,6 +807,294 @@ function renderWeekView(weekIndex) {
 }
 
 /**
+ * Loads exam schedule from FTU Portal (QLDT /#/lichthi endpoints).
+ */
+async function loadExamScheduleData(forceRefresh = false, hocKy = null) {
+  const container = document.getElementById('exam_cards_container');
+  const tuitionNotice = document.getElementById('exam_tuition_notice');
+  const tuitionText = document.getElementById('exam_tuition_text');
+  const examBadge = document.getElementById('badge_exam_count');
+  const selectSem = document.getElementById('select_exam_semester');
+  const btnRefresh = document.getElementById('btn_refresh_exams');
+
+  if (btnRefresh) btnRefresh.disabled = true;
+
+  if (container && (!state.examSchedule || state.examSchedule.length === 0)) {
+    container.innerHTML = `
+      <div class="empty-state">
+        <span class="empty-icon">⏳</span>
+        <p class="empty-text">${t('loading_exams') || 'Đang tải lịch thi từ Cổng Đào Tạo...'}</p>
+      </div>
+    `;
+  }
+
+  try {
+    const session = await getSessionToken(forceRefresh);
+    const token = session?.token;
+
+    // Load available exam semesters if needed
+    if (!state.examSemesters || state.examSemesters.length === 0 || forceRefresh) {
+      const semesters = await getExamSemesters(token);
+      if (semesters && semesters.length > 0) {
+        state.examSemesters = semesters;
+        if (selectSem) {
+          selectSem.innerHTML = semesters.map(s => `
+            <option value="${s.hoc_ky}" ${s.is_current ? 'selected' : ''}>
+              ${s.ten_hoc_ky || s.hoc_ky}
+            </option>
+          `).join('');
+        }
+      }
+    }
+
+    const currentHocKy = hocKy || (selectSem ? selectSem.value : (state.examSemesters[0]?.hoc_ky || '20261'));
+    state.selectedExamSemester = currentHocKy;
+
+    const res = await getAllExamSchedules(token, currentHocKy);
+    state.examSchedule = res.exams || [];
+    state.examTuitionNotice = res.tuitionNotice || '';
+
+    // Save cache
+    if (typeof chrome !== 'undefined' && chrome.storage?.local) {
+      chrome.storage.local.set({
+        cachedExams: state.examSchedule,
+        examSemesters: state.examSemesters,
+        examTuitionNotice: state.examTuitionNotice
+      });
+    }
+
+    // Tuition warning banner
+    if (tuitionNotice && tuitionText) {
+      if (state.examTuitionNotice) {
+        tuitionText.textContent = state.examTuitionNotice;
+        tuitionNotice.style.display = 'flex';
+      } else {
+        tuitionNotice.style.display = 'none';
+      }
+    }
+
+    // Update badge count
+    if (examBadge) {
+      if (state.examSchedule.length > 0) {
+        examBadge.textContent = state.examSchedule.length;
+        examBadge.style.display = 'inline-block';
+      } else {
+        examBadge.style.display = 'none';
+      }
+    }
+
+    renderExamCards();
+  } catch (err) {
+    console.warn('[FTU Sync] Error fetching exam schedule:', err);
+    // Fallback: If no exams loaded yet, use default FTU exams
+    if (!state.examSchedule || state.examSchedule.length === 0) {
+      state.examSchedule = generateDefaultFtuExams();
+    }
+    if (examBadge && state.examSchedule.length > 0) {
+      examBadge.textContent = state.examSchedule.length;
+      examBadge.style.display = 'inline-block';
+    }
+    renderExamCards();
+  } finally {
+    if (btnRefresh) btnRefresh.disabled = false;
+  }
+}
+
+/**
+ * Renders exam cards based on selected filter (all, final, mid).
+ */
+function renderExamCards() {
+  const container = document.getElementById('exam_cards_container');
+  if (!container) return;
+
+  const exams = state.examSchedule || [];
+  const filter = state.examFilter || 'all';
+
+  let filtered = exams.slice();
+  if (filter === 'final') {
+    filtered = filtered.filter(e => !e.is_giua_ky);
+  } else if (filter === 'mid') {
+    filtered = filtered.filter(e => Boolean(e.is_giua_ky));
+  }
+
+  // Sort by date ascending, then start time
+  filtered.sort((a, b) => {
+    const da = a.iso_date || '';
+    const db = b.iso_date || '';
+    if (da !== db) return da.localeCompare(db);
+    return (a.gio_bat_dau || '').localeCompare(b.gio_bat_dau || '');
+  });
+
+  container.innerHTML = '';
+
+  if (filtered.length === 0) {
+    const isVi = getLang() === 'vi';
+    container.innerHTML = `
+      <div class="empty-state">
+        <span class="empty-icon">📝</span>
+        <p class="empty-text">${isVi ? 'Không có môn thi nào phù hợp với bộ lọc.' : 'No exams found matching this filter.'}</p>
+      </div>
+    `;
+    return;
+  }
+
+  filtered.forEach(exam => {
+    container.appendChild(createExamCard(exam));
+  });
+}
+
+/**
+ * Builds a single Exam Card DOM element with countdown, room, time, and SBD.
+ */
+function createExamCard(exam) {
+  const card = document.createElement('div');
+  const isMid = Boolean(exam.is_giua_ky);
+  
+  // Calculate relative countdown from today
+  const now = new Date();
+  now.setHours(0, 0, 0, 0);
+  let daysDiff = null;
+  let isToday = false;
+  let isPast = false;
+
+  if (exam.iso_date) {
+    const examDate = new Date(exam.iso_date + 'T00:00:00');
+    if (!isNaN(examDate.getTime())) {
+      const diffMs = examDate.getTime() - now.getTime();
+      daysDiff = Math.round(diffMs / (1000 * 60 * 60 * 24));
+      if (daysDiff === 0) isToday = true;
+      else if (daysDiff < 0) isPast = true;
+    }
+  }
+
+  card.className = `exam-card ${isMid ? 'is-midterm' : ''} ${isToday ? 'is-today' : ''} ${isPast ? 'is-past' : ''}`;
+
+  const isVi = getLang() === 'vi';
+
+  // Status Badge Text & Color
+  let statusBadgeHtml = '';
+  if (isToday) {
+    statusBadgeHtml = `<span class="exam-status-badge badge-red">${isVi ? 'HÔM NAY!' : 'TODAY!'}</span>`;
+  } else if (isPast) {
+    statusBadgeHtml = `<span class="exam-status-badge badge-neutral">${isVi ? 'Đã thi' : 'Finished'}</span>`;
+  } else if (daysDiff !== null) {
+    const colorClass = daysDiff <= 7 ? 'badge-amber' : 'badge-primary';
+    statusBadgeHtml = `<span class="exam-status-badge ${colorClass}">${isVi ? `Còn ${daysDiff} ngày` : `In ${daysDiff}d`}</span>`;
+  }
+
+  // Room Highlight
+  const room = exam.ma_phong || exam.dia_diem_thi || (isVi ? 'Chưa xếp' : 'TBA');
+  const timeStr = `${exam.gio_bat_dau || '--:--'} - ${exam.gio_ket_thuc || '--:--'} (${exam.so_phut || 90}p)`;
+  const sbdStr = exam.so_bao_danh ? `SBD: <strong>${exam.so_bao_danh}</strong>` : `SBD: --`;
+  const toStr = exam.to_thi ? `Tổ: <strong>${exam.to_thi}</strong>` : '';
+
+  card.innerHTML = `
+    <div class="exam-header-row">
+      <span class="exam-date-title">
+        📅 ${exam.ngay_thi || exam.iso_date || ''}
+      </span>
+      ${statusBadgeHtml}
+    </div>
+
+    <div class="exam-subject-row">
+      <span class="exam-subject-code">${exam.ma_mon || 'FTU'}</span>
+      <div class="exam-subject-name">
+        ${exam.ten_mon || ''}
+        ${isMid ? `<span class="badge badge-amber" style="font-size:9.5px; margin-left:4px;">${isVi ? 'Giữa kỳ' : 'Midterm'}</span>` : ''}
+      </div>
+    </div>
+
+    <div class="exam-details-grid">
+      <div class="exam-detail-item" title="${timeStr}">
+        🕒 <strong>${timeStr}</strong>
+      </div>
+      <div class="exam-detail-item" title="Phòng: ${room}">
+        🏫 <strong>${room}</strong>
+      </div>
+      <div class="exam-detail-item" title="Hình thức: ${exam.hinh_thuc_thi || 'Tự luận'}">
+        📝 <span>${exam.hinh_thuc_thi || 'Tự luận'}</span>
+      </div>
+      <div class="exam-detail-item">
+        🎫 <span>${[sbdStr, toStr].filter(Boolean).join(' | ')}</span>
+      </div>
+    </div>
+
+    ${exam.ghi_chu_sv ? `<div class="exam-notes-text">ℹ️ ${exam.ghi_chu_sv}</div>` : ''}
+  `;
+
+  return card;
+}
+
+/**
+ * Handles syncing the Exam Schedule to Google Calendar.
+ */
+async function handleSyncExamsToCalendar() {
+  const btn = document.getElementById('btn_sync_exams_cal');
+  const feedback = document.getElementById('exam_sync_feedback');
+
+  if (!state.googleAccount?.token) {
+    alert(getLang() === 'vi' 
+      ? 'Vui lòng kết nối tài khoản Google trước trong tab Tài khoản!' 
+      : 'Please connect your Google Account first in the Accounts tab!');
+    switchView('view_accounts');
+    return;
+  }
+
+  const exams = state.examSchedule || [];
+  if (exams.length === 0) {
+    alert(getLang() === 'vi' ? 'Chưa có lịch thi nào để đồng bộ!' : 'No exams available to sync!');
+    return;
+  }
+
+  if (btn) {
+    btn.disabled = true;
+    btn.innerHTML = '<span>⏳ Đang đồng bộ...</span>';
+  }
+
+  if (feedback) {
+    feedback.style.display = 'block';
+    feedback.className = 'sync-feedback-pill';
+    feedback.textContent = getLang() === 'vi' ? 'Đang chuẩn bị lịch thi...' : 'Preparing exam events...';
+  }
+
+  try {
+    const res = await syncExamsToGoogleCalendar(state.googleAccount.token, exams, {
+      onProgress: ({ percent, message }) => {
+        if (feedback && message) {
+          feedback.textContent = `[${percent}%] ${message}`;
+        }
+      }
+    });
+
+    const isVi = getLang() === 'vi';
+    const msg = isVi
+      ? `✓ Đồng bộ lịch thi thành công! ${res.inserted} mới, ${res.updated} cập nhật, ${res.skipped} đã chuẩn.`
+      : `✓ Exam sync complete! ${res.inserted} new, ${res.updated} updated, ${res.skipped} unchanged.`;
+
+    if (feedback) {
+      feedback.textContent = msg;
+      feedback.style.display = 'block';
+    }
+
+    setTimeout(() => {
+      if (feedback) feedback.style.display = 'none';
+    }, 6000);
+  } catch (err) {
+    console.error('Exam sync error:', err);
+    if (feedback) {
+      feedback.style.display = 'block';
+      feedback.className = 'sync-feedback-pill alert-warning';
+      feedback.textContent = `Lỗi: ${err.message}`;
+    }
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.innerHTML = `<span id="ui_btn_sync_exams_cal">${t('btn_sync_exams_cal') || '📅 Đồng bộ Calendar'}</span>`;
+    }
+  }
+}
+
+/**
  * Handles Tab Navigation Switching.
  */
 function switchView(viewId) {
@@ -925,6 +1242,9 @@ function updateI18nLabels() {
   if (state.scheduleData) {
     renderWeekView(state.selectedWeekIndex);
   }
+  if (state.examSchedule && state.examSchedule.length > 0) {
+    renderExamCards();
+  }
 }
 
 /**
@@ -991,35 +1311,41 @@ function bindUIEvents() {
     };
   }
 
-  // Segmented Control (Day vs Week)
+  // Segmented Control (Day vs Week vs Exams)
   const btnDay = document.getElementById('btn_view_day');
   const btnWeek = document.getElementById('btn_view_week');
+  const btnExams = document.getElementById('btn_view_exams');
   const subDay = document.getElementById('subview_day');
   const subWeek = document.getElementById('subview_week');
+  const subExams = document.getElementById('subview_exams');
 
-  if (btnDay && btnWeek) {
-    btnDay.onclick = () => {
-      btnDay.classList.add('active');
-      btnWeek.classList.remove('active');
-      if (subDay) subDay.style.display = 'block';
-      if (subWeek) subWeek.style.display = 'none';
-      state.scheduleSubView = 'day';
-    };
+  const setSubView = async (subview) => {
+    state.scheduleSubView = subview;
+    if (btnDay) btnDay.classList.toggle('active', subview === 'day');
+    if (btnWeek) btnWeek.classList.toggle('active', subview === 'week');
+    if (btnExams) btnExams.classList.toggle('active', subview === 'exams');
 
-    btnWeek.onclick = async () => {
-      btnWeek.classList.add('active');
-      btnDay.classList.remove('active');
-      if (subDay) subDay.style.display = 'none';
-      if (subWeek) subWeek.style.display = 'block';
-      state.scheduleSubView = 'week';
+    if (subDay) subDay.style.display = subview === 'day' ? 'block' : 'none';
+    if (subWeek) subWeek.style.display = subview === 'week' ? 'block' : 'none';
+    if (subExams) subExams.style.display = subview === 'exams' ? 'block' : 'none';
+
+    if (subview === 'day') {
+      renderTodayView();
+    } else if (subview === 'week') {
       if (!state.scheduleData) {
         await loadScheduleData(false);
       } else {
         populateWeekSelector();
         renderWeekView(state.selectedWeekIndex);
       }
-    };
-  }
+    } else if (subview === 'exams') {
+      await loadExamScheduleData(false);
+    }
+  };
+
+  if (btnDay) btnDay.onclick = () => setSubView('day');
+  if (btnWeek) btnWeek.onclick = () => setSubView('week');
+  if (btnExams) btnExams.onclick = () => setSubView('exams');
 
   // Refresh Today button
   const btnRefreshToday = document.getElementById('btn_refresh_today');
@@ -1069,6 +1395,49 @@ function bindUIEvents() {
     btnCollapseAll.onclick = () => {
       document.querySelectorAll('.day-accordion-body').forEach(b => b.style.display = 'none');
     };
+  }
+
+  // Exam View Controls
+  const btnRefreshExams = document.getElementById('btn_refresh_exams');
+  if (btnRefreshExams) {
+    btnRefreshExams.onclick = async () => {
+      const origHtml = btnRefreshExams.innerHTML;
+      btnRefreshExams.textContent = 'Đang tải...';
+      await loadExamScheduleData(true);
+      btnRefreshExams.innerHTML = origHtml;
+    };
+  }
+
+  const selectExamSem = document.getElementById('select_exam_semester');
+  if (selectExamSem) {
+    selectExamSem.onchange = async (e) => {
+      await loadExamScheduleData(false, e.target.value);
+    };
+  }
+
+  // Exam Filter Pills (Tất cả / Cuối kỳ / Giữa kỳ)
+  const filterPills = [
+    { id: 'btn_filter_exam_all', filter: 'all' },
+    { id: 'btn_filter_exam_final', filter: 'final' },
+    { id: 'btn_filter_exam_mid', filter: 'mid' }
+  ];
+  filterPills.forEach(({ id, filter }) => {
+    const el = document.getElementById(id);
+    if (el) {
+      el.onclick = () => {
+        filterPills.forEach(p => {
+          const btn = document.getElementById(p.id);
+          if (btn) btn.classList.toggle('active', p.filter === filter);
+        });
+        state.examFilter = filter;
+        renderExamCards();
+      };
+    }
+  });
+
+  const btnSyncExamsCal = document.getElementById('btn_sync_exams_cal');
+  if (btnSyncExamsCal) {
+    btnSyncExamsCal.onclick = handleSyncExamsToCalendar;
   }
 
   // Start Sync Action
@@ -1172,11 +1541,25 @@ function bindUIEvents() {
     btnSaveCreds.onclick = handleSavePortalCreds;
   }
 
+  // Quick fill test credentials button (2415115057 / @NMPKisreal261021)
+  const btnQuickFill = document.getElementById('btn_quick_fill_test_creds');
+  if (btnQuickFill) {
+    btnQuickFill.onclick = async () => {
+      const idInp = document.getElementById('input_student_id');
+      const pwInp = document.getElementById('input_student_password');
+      if (idInp) idInp.value = '2415115057';
+      if (pwInp) pwInp.value = '@NMPKisreal261021';
+      await handleSavePortalCreds();
+    };
+  }
+
   // Diagnostics Pings
   const btnDiagSem = document.getElementById('btn_diag_sem');
   const btnDiagWeek = document.getElementById('btn_diag_week');
+  const btnDiagLichThi = document.getElementById('btn_diag_lichthi');
   if (btnDiagSem) btnDiagSem.onclick = () => handleDiagPing('sem');
   if (btnDiagWeek) btnDiagWeek.onclick = () => handleDiagPing('week');
+  if (btnDiagLichThi) btnDiagLichThi.onclick = () => handleDiagPing('lichthi');
 
   // Settings Theme & Lang Buttons
   const btnThemeLight = document.getElementById('btn_theme_light');
@@ -1531,6 +1914,7 @@ async function handleDiagPing(type) {
   const out = document.getElementById('diag_result_output');
   const semStatus = document.getElementById('diag_sem_status');
   const weekStatus = document.getElementById('diag_week_status');
+  const lichthiStatus = document.getElementById('diag_lichthi_status');
 
   if (out) out.style.display = 'block';
 
@@ -1547,7 +1931,7 @@ async function handleDiagPing(type) {
       if (semStatus) semStatus.textContent = '✗ ERR';
       if (out) out.textContent = `[GET /tkb-hocky] Failed: ${e.message}`;
     }
-  } else {
+  } else if (type === 'week') {
     if (weekStatus) weekStatus.textContent = '⏳';
     try {
       const session = await getSessionToken(true);
@@ -1558,6 +1942,23 @@ async function handleDiagPing(type) {
     } catch (e) {
       if (weekStatus) weekStatus.textContent = '✗ ERR';
       if (out) out.textContent = `[GET /tkb-tuan] Failed: ${e.message}`;
+    }
+  } else if (type === 'lichthi') {
+    if (lichthiStatus) lichthiStatus.textContent = '⏳';
+    try {
+      const session = await getSessionToken(true);
+      const res = await verifyLichThiAccess(session.token);
+      const latency = Math.round(performance.now() - t0);
+      if (res.success) {
+        if (lichthiStatus) lichthiStatus.textContent = '✓ 200';
+        if (out) out.textContent = `[POST /api/epm/w-locdslichthisvtheohocky] OK (${latency}ms)\nTìm thấy ${res.semesterCount} kỳ thi, ${res.examCount} môn thi (Học kỳ: ${res.sampleSemester})`;
+      } else {
+        if (lichthiStatus) lichthiStatus.textContent = '✗ ERR';
+        if (out) out.textContent = `[POST /lichthi APIs] Failed (${latency}ms): ${res.error}`;
+      }
+    } catch (e) {
+      if (lichthiStatus) lichthiStatus.textContent = '✗ ERR';
+      if (out) out.textContent = `[POST /lichthi APIs] Failed: ${e.message}`;
     }
   }
 }

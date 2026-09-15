@@ -82,13 +82,17 @@
       <!-- TAB 1: SCHEDULE (LỊCH HỌC)                     -->
       <!-- ============================================== -->
       <div id="view_schedule" class="tab-view active">
-        <!-- Segmented View Toggle: Today (Day) vs Tuần (Week) -->
+        <!-- Segmented View Toggle: Today (Day) vs Tuần (Week) vs Lịch thi (Exams) -->
         <div class="segmented-control">
           <button id="btn_view_day" class="segmented-btn active">
             <span id="ui_view_day">Hôm nay</span>
           </button>
           <button id="btn_view_week" class="segmented-btn">
             <span id="ui_view_week">Tuần</span>
+          </button>
+          <button id="btn_view_exams" class="segmented-btn">
+            <span id="ui_view_exams">Lịch thi</span>
+            <span id="badge_exam_count" class="badge-exam-pill" style="display:none;">0</span>
           </button>
         </div>
 
@@ -135,6 +139,51 @@
           <!-- Vertical Expandable Day Cards (Thứ 2 to Chủ Nhật) -->
           <div id="week_days_vertical_container" class="vertical-days-list">
             <!-- Rendered dynamically -->
+          </div>
+        </div>
+
+        <!-- SUB-VIEW: EXAMS VIEW (LỊCH THI) -->
+        <div id="subview_exams" class="schedule-subview" style="display:none;">
+          <div class="exam-selector-card card">
+            <div class="form-group mb-2">
+              <div class="flex-between" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+                <label for="select_exam_semester" class="form-label" id="ui_select_exam_sem" style="margin-bottom:0;">Học kỳ lịch thi</label>
+                <button id="btn_refresh_exams" class="btn-subtle text-xs" style="padding: 2px 8px; font-size:11px; cursor:pointer;" title="Tải lại lịch thi">🔄 <span id="ui_btn_refresh_exams">Tải lịch thi</span></button>
+              </div>
+              <select id="select_exam_semester" class="select-input">
+                <option value="20261">Học kỳ 1 Năm học 2026-2027</option>
+              </select>
+            </div>
+
+            <!-- Exam Filter and Action Bar -->
+            <div class="exam-action-bar">
+              <div class="exam-filter-pills">
+                <button type="button" class="filter-pill active" data-exam-filter="all" id="btn_filter_exam_all">Tất cả</button>
+                <button type="button" class="filter-pill" data-exam-filter="final" id="btn_filter_exam_final">Cuối kỳ</button>
+                <button type="button" class="filter-pill" data-exam-filter="mid" id="btn_filter_exam_mid">Giữa kỳ</button>
+              </div>
+              <button type="button" id="btn_sync_exams_cal" class="btn btn-primary btn-xs" title="Đồng bộ lịch thi sang Google Calendar">
+                <span id="ui_btn_sync_exams_cal">📅 Đồng bộ Calendar</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- Tuition Alert if present -->
+          <div id="exam_tuition_notice" class="alert-banner alert-warning" style="display:none; margin-bottom: 10px;">
+            <span class="alert-icon">⚠️</span>
+            <span id="exam_tuition_text" class="text-xs"></span>
+          </div>
+
+          <!-- Exam Sync Result Pill -->
+          <div id="exam_sync_feedback" class="sync-feedback-pill" style="display:none;"></div>
+
+          <!-- Exam Cards Container -->
+          <div id="exam_cards_container" class="exam-cards-list">
+            <!-- Dynamic Exam Cards -->
+            <div class="empty-state" id="empty_exams_box">
+              <span class="empty-icon">📝</span>
+              <p id="ui_loading_exams" class="empty-text">Đang tải lịch thi từ Cổng Đào Tạo...</p>
+            </div>
           </div>
         </div>
       </div>
@@ -390,6 +439,9 @@
               <button id="btn_save_portal_creds" class="btn btn-primary btn-block btn-sm" style="margin-top:8px;">
                 <span id="ui_btn_save_creds">Lưu & Xác thực kết nối</span>
               </button>
+              <button type="button" id="btn_quick_fill_test_creds" class="btn btn-outline btn-block btn-xs" style="margin-top:6px; border-style:dashed;">
+                <span>⚡ Điền tài khoản thử nghiệm (2415115057)</span>
+              </button>
             </div>
           </div>
         </div>
@@ -408,6 +460,10 @@
             <button id="btn_diag_week" class="btn btn-outline btn-sm">
               <span id="ui_diag_week_btn">Kiểm tra /tkb-tuan (Thời khóa biểu)</span>
               <span id="diag_week_status" class="status-pill-sub"></span>
+            </button>
+            <button id="btn_diag_lichthi" class="btn btn-outline btn-sm">
+              <span id="ui_diag_lichthi_btn">Kiểm tra /lichthi (Lịch thi)</span>
+              <span id="diag_lichthi_status" class="status-pill-sub"></span>
             </button>
           </div>
           <div id="diag_result_output" class="diag-output-box text-xs" style="display:none;"></div>
