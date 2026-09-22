@@ -607,10 +607,10 @@ function renderTodayView() {
  * Applies session mapping (1-3 -> Ca 1, 4-6 -> Ca 2, 7-9 -> Ca 3, 10-12 -> Ca 4)
  * and room string normalization (e.g. PHA503-PHA503 -> A503) with room-highlighting.
  */
-function createClassCard(item) {
+function createClassCard(item, isConflict = false) {
   const card = document.createElement('div');
   const isMakeup = Boolean(item.is_day_bu || (item.ten_mon || '').includes('Dạy bù') || (item.ghi_chu || '').includes('Dạy bù'));
-  card.className = `class-card ${isMakeup ? 'is-makeup' : ''}`;
+  card.className = `class-card ${isMakeup ? 'is-makeup' : ''} ${isConflict ? 'is-conflict' : ''}`;
 
   const startP = Number(item.tiet_bat_dau) || 1;
   const count = Number(item.so_tiet) || 1;
@@ -643,6 +643,7 @@ function createClassCard(item) {
       <span class="meta-pill">📍 ${roomDisplayHtml}</span>
       <span class="meta-pill">👨‍🏫 ${item.ten_giang_vien || t('lecturer') + ': Chưa cập nhật'}</span>
       ${isMakeup ? `<span class="tag-makeup">${t('makeup_tag')}</span>` : ''}
+      ${isConflict ? `<span class="tag-conflict">⚠️ ${getLang() === 'en' ? 'Conflict' : 'Trùng lịch'}</span>` : ''}
     </div>
   `;
   return card;
@@ -754,6 +755,33 @@ function renderWeekView(weekIndex) {
   const week = state.scheduleData.ds_tuan_tkb[weekIndex];
   const classes = week.ds_thoi_khoa_bieu || week.ds_tkb || week.tkb || [];
 
+  // Optimized conflict checking logic (O(N) per week)
+  const conflictClassSet = new Set();
+  const classesByDate = {};
+  classes.forEach(c => {
+    const dStr = (c.ngay_hoc || '').split('T')[0];
+    if (!classesByDate[dStr]) classesByDate[dStr] = [];
+    classesByDate[dStr].push(c);
+  });
+
+  Object.values(classesByDate).forEach(dayList => {
+    const periodMap = new Map();
+    dayList.forEach(c => {
+      const startP = Number(c.tiet_bat_dau) || 1;
+      const count = Number(c.so_tiet) || 1;
+      for (let p = startP; p < startP + count; p++) {
+        if (!periodMap.has(p)) periodMap.set(p, []);
+        periodMap.get(p).push(c);
+      }
+    });
+
+    periodMap.forEach((overlapping) => {
+      if (overlapping.length > 1) {
+        overlapping.forEach(c => conflictClassSet.add(c));
+      }
+    });
+  });
+
   // Group classes by day of week
   const dayNames = ['Thứ 2', 'Thứ 3', 'Thứ 4', 'Thứ 5', 'Thứ 6', 'Thứ 7', 'Chủ Nhật'];
   const dayNamesEn = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
@@ -780,11 +808,15 @@ function renderWeekView(weekIndex) {
 
     const hasClasses = dayClasses.length > 0;
     const badgeClass = hasClasses ? 'badge-primary' : 'badge-neutral';
+    const dayConflicts = dayClasses.filter(c => conflictClassSet.has(c)).length;
 
     accordion.innerHTML = `
       <div class="day-accordion-header" data-day="${i}">
         <span>${dayName} • <span class="text-muted font-medium">${dateDisplay}</span></span>
-        <span class="badge ${badgeClass}">${dayClasses.length} ${t('classes_count')}</span>
+        <div style="display:flex; align-items:center; gap:6px;">
+          ${dayConflicts > 0 ? `<span class="badge" style="background-color:#8b5cf6; color:#fff; font-size:10px;">⚠️ ${dayConflicts} ${isEn ? 'conflict' : 'trùng'}</span>` : ''}
+          <span class="badge ${badgeClass}">${dayClasses.length} ${t('classes_count')}</span>
+        </div>
       </div>
       <div class="day-accordion-body" id="day_body_${i}" style="display: ${hasClasses ? 'flex' : 'none'};">
         ${hasClasses ? '' : `<div class="text-xs text-muted" style="padding:6px;">${t('no_classes_in_week')}</div>`}
@@ -793,7 +825,10 @@ function renderWeekView(weekIndex) {
 
     const body = accordion.querySelector(`#day_body_${i}`);
     if (hasClasses) {
-      dayClasses.forEach(c => body.appendChild(createClassCard(c)));
+      dayClasses.forEach(c => {
+        const isConflict = conflictClassSet.has(c);
+        body.appendChild(createClassCard(c, isConflict));
+      });
     }
 
     // Toggle on header click
@@ -1381,6 +1416,26 @@ function bindUIEvents() {
       updateWeekSubtitle(idx);
       renderWeekView(idx);
     };
+  }
+
+  // Week Navigation Buttons (Prev / Next)
+  const btnWeekPrev = document.getElementById('btn_week_prev');
+  const btnWeekNext = document.getElementById('btn_week_next');
+
+  const jumpToWeek = async (newIdx) => {
+    const weeks = state.scheduleData?.ds_tuan_tkb || [];
+    if (newIdx < 0 || newIdx >= weeks.length) return;
+    state.selectedWeekIndex = newIdx;
+    if (weekSelect) weekSelect.value = newIdx;
+    updateWeekSubtitle(newIdx);
+    renderWeekView(newIdx);
+  };
+
+  if (btnWeekPrev) {
+    btnWeekPrev.onclick = () => jumpToWeek(state.selectedWeekIndex - 1);
+  }
+  if (btnWeekNext) {
+    btnWeekNext.onclick = () => jumpToWeek(state.selectedWeekIndex + 1);
   }
 
   // Expand / Collapse all days

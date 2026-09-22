@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAzTG6AopoaVr87P3kttLjXVXfQ1NRhqPxl+pD7IFQAIlupmG0ndlRvs60IsD3JD59SHwb/YVXJkx02NU0JLFEWo8+TDBrAHdDamVb8ri9q1O5lNTYh1LB0iXReGRCKdfjo8Knw6Xq8wNuFOJLb0OPm6M9MWNGDX+FneKIEoa65Uwg2VaxI3LKuJm96mBz/+bsXrZnHC8MIU9Q5TWuyY0AgqUdwWVg3XwUWVt9wJoNGK7jj84pOg4z76WSr1zqRP1vj9RrKFUQUMdLr81evpQ20eR2ms1hVzlwSnuzWfBTtfNmcoBL1OTeDHQi75I1nXN88h+69UuUiTC+IgP2Iwr4iQIDAQAB",
   "name": "FTU Schedule Sync",
-  "version": "1.4.1",
+  "version": "1.4.2",
   "description": "Synchronize university class schedules with Google Calendar.",
   "icons": {
     "16": "extension/ftu_logo.png",

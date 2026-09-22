@@ -45,7 +45,7 @@
         <div class="update-banner-text">
           <div class="update-title-row">
             <span id="ui_update_available_title" class="update-banner-title">Có bản cập nhật mới!</span>
-            <span id="update_badge_version" class="update-version-badge">v1.4.0</span>
+            <span id="update_badge_version" class="update-version-badge">v1.4.2</span>
           </div>
           <p id="ui_update_available_desc" class="update-banner-desc">Đã có phiên bản mới hơn trên GitHub.</p>
         </div>
@@ -121,7 +121,11 @@
             <div class="form-group">
               <div class="flex-between" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
                 <label for="select_week_dropdown" class="form-label" id="ui_select_week" style="margin-bottom:0;">Chọn tuần học</label>
-                <button id="btn_refresh_week" class="btn-subtle text-xs" style="padding: 2px 8px; font-size:11px; cursor:pointer;" title="Tải lại thời khóa biểu">🔄 <span id="ui_btn_refresh_week">Tải lịch</span></button>
+                <div style="display: flex; gap: 4px; align-items: center;">
+                  <button id="btn_week_prev" class="btn-subtle text-xs" style="padding: 2px 6px; font-size: 11px;" title="Tuần trước">◀</button>
+                  <button id="btn_week_next" class="btn-subtle text-xs" style="padding: 2px 6px; font-size: 11px;" title="Tuần sau">▶</button>
+                  <button id="btn_refresh_week" class="btn-subtle text-xs" style="padding: 2px 8px; font-size:11px; cursor:pointer;" title="Tải lại thời khóa biểu">🔄 <span id="ui_btn_refresh_week">Tải lịch</span></button>
+                </div>
               </div>
               <select id="select_week_dropdown" class="select-input">
                 <option value="0">Đang tải danh sách tuần...</option>

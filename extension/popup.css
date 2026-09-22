@@ -1713,3 +1713,22 @@ input[type="checkbox"] {
   animation: slideDownFade 0.2s ease-out;
 }
 
+/* Trùng lịch học (Class conflict indicator) */
+.class-card.is-conflict {
+  border-left: 4px solid #8b5cf6 !important;
+  background: linear-gradient(90deg, rgba(139, 92, 246, 0.08) 0%, transparent 100%);
+}
+
+.tag-conflict {
+  background-color: #8b5cf6;
+  color: #ffffff;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+
+
