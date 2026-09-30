@@ -3,33 +3,269 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>FTU Schedule - Information & Legal</title>
+    <title>FTU Schedule Sync - Privacy Policy & Terms of Service</title>
     <style>
-        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; max-width: 700px; margin: 60px auto; padding: 0 20px; line-height: 1.6; color: #333; background: #f9f9f9; }
-        .container { background: #fff; padding: 40px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
-        h1 { color: #1a73e8; margin-top: 0; }
-        h2 { color: #333; border-bottom: 2px solid #eee; padding-bottom: 8px; margin-top: 30px; }
-        p, li { color: #555; }
-        .footer { margin-top: 40px; font-size: 0.85em; color: #888; text-align: center; }
+        :root {
+            --primary: #1a73e8;
+            --text: #333333;
+            --bg: #f9fbfd;
+            --card-bg: #ffffff;
+            --border: #e0e0e0;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            color: var(--text);
+            background-color: var(--bg);
+            line-height: 1.6;
+            margin: 0;
+            padding: 0;
+        }
+        .container {
+            max-width: 900px;
+            margin: 40px auto;
+            padding: 40px;
+            background: var(--card-bg);
+            border-radius: 12px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.05);
+        }
+        h1, h2, h3, h4 {
+            color: var(--primary);
+        }
+        h1 {
+            font-size: 2.2rem;
+            margin-bottom: 5px;
+            border-bottom: 2px solid var(--primary);
+            padding-bottom: 15px;
+        }
+        h2 {
+            font-size: 1.6rem;
+            margin-top: 40px;
+            border-bottom: 1px solid var(--border);
+            padding-bottom: 8px;
+        }
+        h3 {
+            font-size: 1.3rem;
+            margin-top: 30px;
+            color: #555;
+        }
+        h4 {
+            font-size: 1.1rem;
+            margin-top: 20px;
+        }
+        ul {
+            padding-left: 20px;
+        }
+        li {
+            margin-bottom: 8px;
+        }
+        p {
+            margin-bottom: 15px;
+        }
+        .meta {
+            font-style: italic;
+            color: #666;
+            margin-bottom: 30px;
+        }
+        hr {
+            border: none;
+            border-top: 2px dashed var(--border);
+            margin: 50px 0;
+        }
+        .nav {
+            background: #eef3f8;
+            padding: 15px 20px;
+            border-radius: 8px;
+            margin-bottom: 30px;
+            display: flex;
+            gap: 20px;
+        }
+        .nav a {
+            color: var(--primary);
+            text-decoration: none;
+            font-weight: bold;
+        }
+        .nav a:hover {
+            text-decoration: underline;
+        }
     </style>
 </head>
 <body>
-    <div class="container">
-        <h1>FTU Schedule Extension</h1>
-        <p>A lightweight Chrome extension designed to help students manage their schedules efficiently.</p>
-        
-        <h2>Privacy Policy</h2>
-        <p><strong>Effective date:</strong> September 30, 2026</p>
-        <p>FTU Schedule uses Google OAuth strictly to retrieve calendar and schedule information required for personal academic planning. We do not collect, store, or share your personal data with any external third parties.</p>
 
-        <h2>Terms of Service</h2>
-        <p>By using the FTU Schedule browser extension, you agree to use it solely for personal, non-commercial academic purposes. The software is provided "as is" without warranty of any kind.</p>
+<div class="container">
+    <h1>FTU Schedule Sync</h1>
+    <p class="meta">Legal Documentation: Privacy Policy & Terms of Service</p>
 
-        <h2>Contact</h2>
-        <p>If you have any questions about this extension, please open an issue on our <a href="https://github.com/Merz26/ftuschedule" target="_blank">GitHub Repository</a>.</p>
+    <div class="nav">
+        <span>Jump to:</span>
+        <a href="#privacy">Privacy Policy / Chính Sách Bảo Mật</a>
+        <a href="#terms">Terms of Service / Điều Khoản Dịch Vụ</a>
     </div>
-    <div class="footer">
-        &copy; 2026 FTU Schedule. All rights reserved.
-    </div>
+
+    <!-- PRIVACY POLICY -->
+    <section id="privacy">
+        <h2>PRIVACY POLICY / CHÍNH SÁCH BẢO MẬT</h2>
+
+        <h3>English Version</h3>
+        <p><strong>Privacy Policy for FTU Schedule Sync</strong><br><em>Last updated: September 10, 2026</em></p>
+
+        <h4>1. Overview</h4>
+        <p>FTU Schedule Sync ("the Extension", "we", "our") is an open-source, client-side browser extension designed to help students synchronize their university class schedules with Google Calendar or export them as standard <code>.ics</code> calendar files. We are committed to protecting your privacy. The Extension operates entirely within your browser and does not maintain any external backend servers, databases, or analytics services.</p>
+
+        <h4>2. Information We Access and How We Use It</h4>
+        <ul>
+            <li><strong>University Portal Data & Session Information:</strong>
+                <ul>
+                    <li>To fetch your schedule, the Extension accesses your active session bearer token stored in the browser (<code>sessionStorage</code>) when you visit the university portal (<code>qldt.hcmc.ftu.edu.vn</code>).</li>
+                    <li>If you choose to use the automated session recovery feature, your Student ID and Password are stored strictly on your local device using <code>chrome.storage.local</code>. These credentials are used solely to authenticate directly with the university portal via an internal offscreen document. They are never transmitted to any third-party server.</li>
+                </ul>
+            </li>
+            <li><strong>Google Account & Calendar Data:</strong>
+                <ul>
+                    <li>The Extension uses Google OAuth2 (<code>launchWebAuthFlow</code>) to request limited access to your Google Calendar (<code>calendar.events</code> scope).</li>
+                    <li>We use this access solely to create, update (patch room changes), and deduplicate class events on your designated calendar.</li>
+                    <li>We do not read, alter, or delete any personal events unrelated to the university timetable (identified by the <code>ftu-calendar-sync</code> private metadata tag).</li>
+                </ul>
+            </li>
+            <li><strong>Uploaded Files:</strong>
+                <ul>
+                    <li>When you drop an Excel timetable file (<code>Export_TKB.xlsx</code>), it is parsed locally in browser memory via client-side JavaScript. The file and its contents never leave your device.</li>
+                </ul>
+            </li>
+        </ul>
+
+        <h4>3. Data Storage and Security</h4>
+        <ul>
+            <li><strong>Zero External Transmission:</strong> None of your personal data, credentials, timetable entries, or calendar data are transmitted to any remote developer server or third-party cloud service.</li>
+            <li><strong>Local Storage:</strong> All user preferences (theme, language, auto-sync schedules, and saved portal credentials) are stored exclusively in your browser's local sandbox storage (<code>chrome.storage.local</code>).</li>
+            <li><strong>Revoking Access:</strong> You can clear saved portal credentials at any time in the Accounts tab, and you can disconnect Google Calendar or revoke OAuth permissions directly from your Google Account security settings.</li>
+        </ul>
+
+        <h4>4. Third-Party Services</h4>
+        <p>The Extension communicates directly only with:</p>
+        <ul>
+            <li>The university portal (<code>https://qldt.hcmc.ftu.edu.vn</code>) to retrieve schedule arrays.</li>
+            <li>Google APIs (<code>https://www.googleapis.com</code>) to manage calendar entries.</li>
+        </ul>
+
+        <h4>5. Changes to This Policy</h4>
+        <p>Any future updates to this Privacy Policy will be reflected in the extension's documentation and open-source repository.</p>
+
+        <hr>
+
+        <h3>Bản Tiếng Việt</h3>
+        <p><strong>Chính Sách Bảo Mật cho FTU Schedule Sync</strong><br><em>Cập nhật lần cuối: Ngày 10 tháng 09 năm 2026</em></p>
+
+        <h4>1. Tổng quan</h4>
+        <p>FTU Schedule Sync ("Tiện ích", "chúng tôi") là tiện ích mở rộng trình duyệt mã nguồn mở, hoạt động hoàn toàn phía máy khách (client-side), được phát triển nhằm hỗ trợ sinh viên đồng bộ thời khóa biểu từ cổng đào tạo với Google Calendar hoặc xuất dưới dạng tệp tin <code>.ics</code>. Tiện ích tôn trọng quyền riêng tư của người dùng: toàn bộ quá trình xử lý diễn ra trực tiếp trên trình duyệt của bạn; chúng tôi không sở hữu, vận hành hay gửi dữ liệu đến bất kỳ máy chủ trung gian, cơ sở dữ liệu hoặc công cụ phân tích dữ liệu nào bên ngoài.</p>
+
+        <h4>2. Dữ liệu chúng tôi xử lý và mục đích sử dụng</h4>
+        <ul>
+            <li><strong>Dữ liệu Cổng Đào tạo & Phiên làm việc:</strong>
+                <ul>
+                    <li>Để lấy lịch học, Tiện ích truy xuất mã thông báo phiên làm việc (<code>access_token</code>) lưu trữ tại <code>sessionStorage</code> của trình duyệt khi bạn đăng nhập vào cổng thông tin đào tạo (<code>qldt.hcmc.ftu.edu.vn</code>).</li>
+                    <li>Nếu bạn sử dụng tính năng tự động duy trì phiên đăng nhập, Mã sinh viên và Mật khẩu của bạn được lưu hoàn toàn trên bộ nhớ cục bộ của trình duyệt (<code>chrome.storage.local</code>). Thông tin này chỉ dùng để tương tác trực tiếp với form đăng nhập của cổng đào tạo và tuyệt đối không bao giờ được gửi tới bất kỳ bên thứ ba nào.</li>
+                </ul>
+            </li>
+            <li><strong>Tài khoản Google & Dữ liệu Google Calendar:</strong>
+                <ul>
+                    <li>Tiện ích sử dụng giao thức Google OAuth2 (<code>launchWebAuthFlow</code>) nhằm xin quyền chỉnh sửa sự kiện lịch (<code>scope: calendar.events</code>).</li>
+                    <li>Quyền này chỉ được sử dụng để: kiểm tra trùng lịch, thêm các buổi học (bao gồm lịch học chính khóa và lịch học bù) và cập nhật phòng học khi có thay đổi.</li>
+                    <li>Tiện ích không đọc, sửa đổi hoặc xóa bất kỳ sự kiện cá nhân nào khác của bạn ngoài các sự kiện do Tiện ích tạo ra (được gắn nhãn định danh riêng <code>ftu-calendar-sync</code>).</li>
+                </ul>
+            </li>
+            <li><strong>Tệp tin tải lên:</strong>
+                <ul>
+                    <li>Khi bạn sử dụng tính năng tải tệp Excel thời khóa biểu (<code>Export_TKB.xlsx</code>), việc giải mã dữ liệu được thực thi 100% trong bộ nhớ tạm của trình duyệt. Không có dữ liệu tệp tin nào được tải lên máy chủ ngoài.</li>
+                </ul>
+            </li>
+        </ul>
+
+        <h4>3. Lưu trữ và Bảo mật Dữ liệu</h4>
+        <ul>
+            <li><strong>Không lưu trữ máy chủ ngoài:</strong> Tuyệt đối không có bất kỳ thông tin đăng nhập, thời khóa biểu hoặc dữ liệu cá nhân nào được lưu trữ bên ngoài trình duyệt của bạn.</li>
+            <li><strong>Lưu trữ cục bộ:</strong> Mọi cài đặt cá nhân (chế độ sáng/tối, ngôn ngữ, lịch đồng bộ tự động và thông tin tài khoản portal) được lưu trữ an toàn trong sandbox cục bộ của trình duyệt (<code>chrome.storage.local</code>).</li>
+            <li><strong>Hủy cấp quyền:</strong> Bạn có thể xóa thông tin đăng nhập đã lưu trong tab Tài khoản bất cứ lúc nào, hoặc thu hồi quyền truy cập Google Calendar trực tiếp từ trang Cài đặt Bảo mật Tài khoản Google của bạn.</li>
+        </ul>
+
+        <h4>4. Dịch vụ Bên thứ ba Liên kết</h4>
+        <p>Tiện ích chỉ gửi yêu cầu mạng trực tiếp đến 2 hệ thống:</p>
+        <ul>
+            <li>Cổng thông tin đào tạo trường (<code>https://qldt.hcmc.ftu.edu.vn</code>) để truy vấn cấu trúc dữ liệu lịch học.</li>
+            <li>Hệ thống máy chủ Google APIs (<code>https://www.googleapis.com</code>) để thao tác dữ liệu lịch.</li>
+        </ul>
+    </section>
+
+    <hr style="margin: 60px 0;">
+
+    <!-- TERMS OF SERVICE -->
+    <section id="terms">
+        <h2>TERMS OF SERVICE / ĐIỀU KHOẢN DỊCH VỤ</h2>
+
+        <h3>English Version</h3>
+        <p><strong>Terms of Service for FTU Schedule Sync</strong><br><em>Last updated: September 10, 2026</em></p>
+
+        <h4>1. Acceptance of Terms</h4>
+        <p>By installing, loading, or using the FTU Schedule Sync browser extension ("the Extension"), you agree to be bound by these Terms of Service. If you do not agree to these terms, please remove the Extension from your browser.</p>
+
+        <h4>2. Description of Utility</h4>
+        <p>The Extension provides browser-based utilities to help university students:</p>
+        <ul>
+            <li>Read schedule data directly from active university portal sessions.</li>
+            <li>Convert schedule data or local Excel timetable files into <code>.ics</code> format.</li>
+            <li>Synchronize timetable shifts and makeup classes directly to the user's personal Google Calendar.</li>
+        </ul>
+
+        <h4>3. Fair and Permissible Use</h4>
+        <ul>
+            <li>You agree to use the Extension solely for your personal academic timetable management.</li>
+            <li>You are responsible for safeguarding your personal device and any portal credentials saved in the Extension's local storage.</li>
+            <li>You acknowledge that the Extension acts strictly as an automated client-side assistant reflecting data provided by your university portal.</li>
+        </ul>
+
+        <h4>4. Disclaimer of Official Affiliation</h4>
+        <p>FTU Schedule Sync is an independent, student-built open-source project. It is <strong>not</strong> an official software application created, maintained, or endorsed by Foreign Trade University or Google Inc. All university trademarks, course names, and institutional logos remain the property of their respective owners.</p>
+
+        <h4>5. Disclaimer of Warranties and Limitation of Liability</h4>
+        <ul>
+            <li>The Extension is provided "AS IS" and "AS AVAILABLE", without warranties of any kind, whether express or implied.</li>
+            <li>While the Extension includes safeguards against event duplication and conflicting periods, the developer is not liable for schedule inaccuracies, missed classes, failed background syncs resulting from expired browser cookies, network downtimes, or alterations made by the university administration.</li>
+            <li>Students remain solely responsible for cross-referencing and verifying official schedule changes on the official university portal.</li>
+        </ul>
+
+        <hr>
+
+        <h3>Bản Tiếng Việt</h3>
+        <p><strong>Điều Khoản Dịch Vụ cho FTU Schedule Sync</strong><br><em>Cập nhật lần cuối: Ngày 10 tháng 09 năm 2026</em></p>
+
+        <h4>1. Chấp thuận Điều khoản</h4>
+        <p>Bằng việc cài đặt, nạp tiện ích (load unpacked) hoặc sử dụng tiện ích mở rộng FTU Schedule Sync ("Tiện ích"), bạn đồng ý tuân thủ các Điều khoản Dịch vụ này. Nếu bạn không đồng ý với bất kỳ điều khoản nào, vui lòng gỡ cài đặt Tiện ích khỏi trình duyệt.</p>
+
+        <h4>2. Mô tả Tiện ích</h4>
+        <p>Tiện ích cung cấp công cụ tự động hóa chạy trên trình duyệt nhằm phục vụ sinh viên:</p>
+        <ul>
+            <li>Đọc dữ liệu thời khóa biểu trực tiếp từ phiên đăng nhập hợp lệ trên cổng đào tạo của trường.</li>
+            <li>Chuyển đổi dữ liệu lịch học hoặc tệp tin Excel thời khóa biểu sang định dạng chuẩn <code>.ics</code>.</li>
+            <li>Đồng bộ lịch học chính khóa, thông tin phòng học và các buổi dạy bù trực tiếp vào Google Calendar cá nhân.</li>
+        </ul>
+
+        <h4>3. Quy định Sử dụng Hợp lý</h4>
+        <ul>
+            <li>Bạn cam kết sử dụng Tiện ích cho mục đích quản lý lịch trình học tập cá nhân.</li>
+            <li>Bạn tự chịu trách nhiệm về việc bảo vệ thiết bị cá nhân cũng như thông tin tài khoản portal được lưu trữ cục bộ trong Tiện ích.</li>
+            <li>Bạn hiểu và đồng ý rằng Tiện ích đóng vai trò như một công cụ hỗ trợ người dùng trích xuất dữ liệu do chính cổng đào tạo cung cấp.</li>
+        </ul>
+
+        <h4>4. Tuyên bố Miễn trừ Liên kết Chính thức</h4>
+        <p>FTU Schedule Sync là một dự án tiện ích độc lập của sinh viên và phần mềm mã nguồn mở. Tiện ích <strong>không phải</strong> là sản phẩm phần mềm chính thức do Trường Đại học Ngoại thương hay Google Inc. trực tiếp phát hành, bảo trợ hoặc chứng nhận. Mọi nhãn hiệu, biểu trưng và tên trường thuộc quyền sở hữu của các tổ chức tương ứng.</p>
+
+        <h4>5. Giới hạn Trách nhiệm & Cảnh báo Trách nhiệm Học tập</h4>
+        <ul>
+            <li>Tiện ích được cung cấp theo nguyên tắc "NGUYÊN TRẠNG" (AS IS), không đi kèm bất kỳ cam kết hay bảo đảm tuyệt đối nào.</li>
+            <li>Mặc dù Tiện ích đã tích hợp các cơ chế chống trùng lịch và kiểm tra phòng học, nhà phát triển không chịu trách nhiệm đối với việc sinh viên bị nhầm lịch, trễ giờ học, sự cố đồng bộ do trình duyệt đóng hoặc hết hạn phiên cookie, hoặc các thay đổi biểu mẫu đột xuất từ phía nhà trường.</li>
+            <li>Sinh viên luôn có trách nhiệm chủ động đối chiếu và xác minh thông tin giảng dạy chính thức trên cổng thông tin của nhà trường.</li>
+        </ul>
+    </section>
+</div>
+
 </body>
 </html>
