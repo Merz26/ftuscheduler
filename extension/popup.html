@@ -45,7 +45,7 @@
         <div class="update-banner-text">
           <div class="update-title-row">
             <span id="ui_update_available_title" class="update-banner-title">Có bản cập nhật mới!</span>
-            <span id="update_badge_version" class="update-version-badge">v1.4.2</span>
+            <span id="update_badge_version" class="update-version-badge">v1.4.3</span>
           </div>
           <p id="ui_update_available_desc" class="update-banner-desc">Đã có phiên bản mới hơn trên GitHub.</p>
         </div>
@@ -82,18 +82,20 @@
       <!-- TAB 1: SCHEDULE (LỊCH HỌC)                     -->
       <!-- ============================================== -->
       <div id="view_schedule" class="tab-view active">
-        <!-- Segmented View Toggle: Today (Day) vs Tuần (Week) vs Lịch thi (Exams) -->
-        <div class="segmented-control">
-          <button id="btn_view_day" class="segmented-btn active">
-            <span id="ui_view_day">Hôm nay</span>
-          </button>
-          <button id="btn_view_week" class="segmented-btn">
-            <span id="ui_view_week">Tuần</span>
-          </button>
-          <button id="btn_view_exams" class="segmented-btn">
-            <span id="ui_view_exams">Lịch thi</span>
-            <span id="badge_exam_count" class="badge-exam-pill" style="display:none;">0</span>
-          </button>
+        <!-- Sticky / Frozen Segmented View Toggle (Day vs Week vs Exams) -->
+        <div class="sticky-segmented-wrapper">
+          <div class="segmented-control">
+            <button id="btn_view_day" class="segmented-btn active">
+              <span id="ui_view_day">Hôm nay</span>
+            </button>
+            <button id="btn_view_week" class="segmented-btn">
+              <span id="ui_view_week">Tuần</span>
+            </button>
+            <button id="btn_view_exams" class="segmented-btn">
+              <span id="ui_view_exams">Lịch thi</span>
+              <span id="badge_exam_count" class="badge-exam-pill" style="display:none;">0</span>
+            </button>
+          </div>
         </div>
 
         <!-- SUB-VIEW: DAY VIEW -->
@@ -119,17 +121,18 @@
         <div id="subview_week" class="schedule-subview" style="display:none;">
           <div class="week-selector-card card">
             <div class="form-group">
-              <div class="flex-between" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
-                <label for="select_week_dropdown" class="form-label" id="ui_select_week" style="margin-bottom:0;">Chọn tuần học</label>
-                <div style="display: flex; gap: 4px; align-items: center;">
-                  <button id="btn_week_prev" class="btn-subtle text-xs" style="padding: 2px 6px; font-size: 11px;" title="Tuần trước">◀</button>
-                  <button id="btn_week_next" class="btn-subtle text-xs" style="padding: 2px 6px; font-size: 11px;" title="Tuần sau">▶</button>
-                  <button id="btn_refresh_week" class="btn-subtle text-xs" style="padding: 2px 8px; font-size:11px; cursor:pointer;" title="Tải lại thời khóa biểu">🔄 <span id="ui_btn_refresh_week">Tải lịch</span></button>
-                </div>
+              <div class="flex-between" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                <label for="select_week_dropdown" class="form-label" id="ui_select_week" style="margin-bottom:0; font-weight:600;">Chọn tuần học</label>
+                <button id="btn_refresh_week" class="btn-subtle text-xs" style="padding: 2px 8px; font-size:11px; cursor:pointer;" title="Tải lại thời khóa biểu">🔄 <span id="ui_btn_refresh_week">Tải lịch</span></button>
               </div>
-              <select id="select_week_dropdown" class="select-input">
-                <option value="0">Đang tải danh sách tuần...</option>
-              </select>
+              <!-- Horizontal Week Navigation with Left / Right Arrows Surrounding Dropdown -->
+              <div class="week-nav-dropdown-row">
+                <button id="btn_week_prev" class="btn-macos-nav" title="Tuần trước" aria-label="Tuần trước">◀</button>
+                <select id="select_week_dropdown" class="select-input week-select-mac">
+                  <option value="0">Đang tải danh sách tuần...</option>
+                </select>
+                <button id="btn_week_next" class="btn-macos-nav" title="Tuần sau" aria-label="Tuần sau">▶</button>
+              </div>
             </div>
             <div class="week-actions-bar">
               <span id="week_range_subtitle" class="text-xs text-muted">07/09/2026 - 13/09/2026</span>
@@ -531,7 +534,7 @@
                 Kiểm tra phiên bản mới nhất từ kho mã nguồn GitHub.
               </p>
             </div>
-            <span class="version-tag" id="current_version_badge">v1.4.0</span>
+            <span class="version-tag" id="current_version_badge">v1.4.3</span>
           </div>
 
           <div class="setting-row mt-3">
@@ -554,7 +557,7 @@
         <div class="card about-card">
           <div class="about-header">
             <span class="font-semibold text-sm" id="ui_about_title">Thông tin & Quyền riêng tư</span>
-            <span class="version-tag" id="app_version_tag">v1.4.0</span>
+            <span class="version-tag" id="app_version_tag">v1.4.3</span>
           </div>
           <p class="text-xs text-muted mb-2" id="ui_privacy_notice">
             Tiện ích hoạt động 100% trên thiết bị của bạn. Thông tin đăng nhập và dữ liệu lịch được lưu an toàn trong trình duyệt và không bao giờ gửi tới bất kỳ máy chủ trung gian nào.
@@ -597,6 +600,12 @@
       </div>
     </main>
 
+    <!-- Floating Add Midterm Exam Action Button (Exams Subview - Bottom Right, Floating, No Scrolling) -->
+    <button type="button" id="btn_open_add_midterm" class="btn-macos-floating-add" title="Thêm lịch thi giữa kỳ (nhập tay)" style="display: none;">
+      <span class="btn-add-plus-icon">+</span>
+      <span id="ui_btn_add_midterm">Thêm thi giữa kỳ</span>
+    </button>
+
     <!-- Fixed Mobile-Style Bottom Navigation Bar -->
     <nav class="bottom-nav">
       <button id="tab_btn_schedule" class="nav-btn active" data-view="view_schedule">
@@ -617,6 +626,70 @@
         <span class="nav-label" id="nav_label_settings">Cài đặt</span>
       </button>
     </nav>
+  </div>
+
+  <!-- macOS Sheet Modal: Manual Midterm Exam Entry -->
+  <div id="modal_add_midterm" class="macos-modal-backdrop" style="display:none;">
+    <div class="macos-modal-window">
+      <div class="macos-modal-header">
+        <div class="macos-traffic-lights">
+          <span class="traffic-light close" id="btn_close_midterm_modal_dot" title="Đóng"></span>
+          <span class="traffic-light min"></span>
+          <span class="traffic-light max"></span>
+        </div>
+        <span class="macos-modal-title" id="ui_modal_add_midterm_title">Thêm lịch thi giữa kỳ</span>
+        <button type="button" class="macos-modal-close-btn" id="btn_close_midterm_modal" title="Đóng">&times;</button>
+      </div>
+      <form id="form_add_midterm" class="macos-modal-body">
+        <div class="form-group mb-2">
+          <label class="form-label text-xs font-semibold" for="input_midterm_name" id="ui_label_midterm_name">Tên môn học <span class="text-danger">*</span></label>
+          <input type="text" id="input_midterm_name" class="select-input" placeholder="VD: Kinh tế vi mô, Marketing..." required autocomplete="off" />
+        </div>
+        <div class="grid-2-cols mb-2">
+          <div class="form-group">
+            <label class="form-label text-xs font-semibold" for="input_midterm_code" id="ui_label_midterm_code">Mã môn học</label>
+            <input type="text" id="input_midterm_code" class="select-input" placeholder="VD: KTE201" autocomplete="off" />
+          </div>
+          <div class="form-group">
+            <label class="form-label text-xs font-semibold" for="select_midterm_type" id="ui_label_midterm_type">Loại kỳ thi</label>
+            <select id="select_midterm_type" class="select-input">
+              <option value="Thi giữa kỳ">Thi giữa kỳ</option>
+              <option value="Kiểm tra định kỳ">Kiểm tra định kỳ</option>
+              <option value="Bảo vệ đồ án / BTL">Bảo vệ BTL / Đồ án</option>
+              <option value="Thi vấn đáp">Thi vấn đáp</option>
+            </select>
+          </div>
+        </div>
+        <div class="grid-2-cols mb-2">
+          <div class="form-group">
+            <label class="form-label text-xs font-semibold" for="input_midterm_date" id="ui_label_midterm_date">Ngày thi <span class="text-danger">*</span></label>
+            <input type="date" id="input_midterm_date" class="select-input" required />
+          </div>
+          <div class="form-group">
+            <label class="form-label text-xs font-semibold" for="input_midterm_time" id="ui_label_midterm_time">Giờ bắt đầu</label>
+            <input type="time" id="input_midterm_time" class="select-input" value="09:00" />
+          </div>
+        </div>
+        <div class="grid-2-cols mb-2">
+          <div class="form-group">
+            <label class="form-label text-xs font-semibold" for="input_midterm_room" id="ui_label_midterm_room">Phòng thi</label>
+            <input type="text" id="input_midterm_room" class="select-input" placeholder="VD: B201, A705..." autocomplete="off" />
+          </div>
+          <div class="form-group">
+            <label class="form-label text-xs font-semibold" for="input_midterm_duration" id="ui_label_midterm_duration">Thời lượng (phút)</label>
+            <input type="number" id="input_midterm_duration" class="select-input" value="60" min="15" max="180" />
+          </div>
+        </div>
+        <div class="form-group mb-3">
+          <label class="form-label text-xs font-semibold" for="input_midterm_notes" id="ui_label_midterm_notes">Ghi chú (SBD, hình thức, tài liệu...)</label>
+          <input type="text" id="input_midterm_notes" class="select-input" placeholder="VD: Tự luận 60p, không dùng tài liệu..." autocomplete="off" />
+        </div>
+        <div class="macos-modal-footer">
+          <button type="button" id="btn_cancel_midterm" class="btn btn-secondary btn-sm">Hủy</button>
+          <button type="submit" id="btn_save_midterm" class="btn btn-primary btn-sm">Lưu lịch thi</button>
+        </div>
+      </form>
+    </div>
   </div>
 
   <!-- SheetJS Dependency -->

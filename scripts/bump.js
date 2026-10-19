@@ -33,6 +33,7 @@ if (fs.existsSync(popupHtmlPath)) {
   let html = fs.readFileSync(popupHtmlPath, 'utf8');
   html = html.replace(/id="current_version_badge">v[\d.]+<\/span>/g, `id="current_version_badge">v${newVersion}</span>`);
   html = html.replace(/id="app_version_tag">v[\d.]+<\/span>/g, `id="app_version_tag">v${newVersion}</span>`);
+  html = html.replace(/id="update_badge_version" class="update-version-badge">v[\d.]+<\/span>/g, `id="update_badge_version" class="update-version-badge">v${newVersion}</span>`);
   fs.writeFileSync(popupHtmlPath, html);
 }
 

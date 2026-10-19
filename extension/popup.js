@@ -77,6 +77,7 @@ let state = {
   selectedExamSemester: null,
   examFilter: 'all', // 'all' | 'final' | 'mid'
   examSchedule: [],
+  customMidtermExams: [],
   examTuitionNotice: ''
 };
 
@@ -241,6 +242,7 @@ async function initApp() {
   // 3. Update internationalized labels
   try {
     updateI18nLabels();
+    updateMidtermFabVisibility();
   } catch (err) {
     console.warn('[FTU Sync] i18n update warning:', err);
   }
@@ -344,16 +346,18 @@ async function loadStoredPreferences() {
         }
         updateLastSyncIndicator('idle', state.lastSyncTimestamp, state.lastSyncInfo);
 
+        // Restore custom manual midterm exams if available
+        if (res.custom_midterm_exams && Array.isArray(res.custom_midterm_exams)) {
+          state.customMidtermExams = res.custom_midterm_exams;
+        }
+
         // Restore cached exam schedule if available
         if (res.cachedExams && Array.isArray(res.cachedExams) && res.cachedExams.length > 0) {
           state.examSchedule = res.cachedExams;
           if (res.examSemesters) state.examSemesters = res.examSemesters;
           if (res.examTuitionNotice) state.examTuitionNotice = res.examTuitionNotice;
-          const badgeExam = document.getElementById('badge_exam_count');
-          if (badgeExam) {
-            badgeExam.textContent = state.examSchedule.length;
-            badgeExam.style.display = 'inline-block';
-          }
+          renderExamCards();
+        } else if (state.customMidtermExams && state.customMidtermExams.length > 0) {
           renderExamCards();
         }
       } catch (err) {
@@ -842,6 +846,32 @@ function renderWeekView(weekIndex) {
 }
 
 /**
+ * Loads custom manually added midterm exams from chrome.storage.local.
+ */
+async function loadCustomMidtermExams() {
+  if (typeof chrome !== 'undefined' && chrome.storage?.local) {
+    return new Promise((resolve) => {
+      chrome.storage.local.get(['custom_midterm_exams'], (res) => {
+        state.customMidtermExams = Array.isArray(res.custom_midterm_exams) ? res.custom_midterm_exams : [];
+        resolve(state.customMidtermExams);
+      });
+    });
+  }
+  return state.customMidtermExams || [];
+}
+
+/**
+ * Saves custom midterm exams to chrome.storage.local.
+ */
+async function saveCustomMidtermExams() {
+  if (typeof chrome !== 'undefined' && chrome.storage?.local) {
+    return new Promise((resolve) => {
+      chrome.storage.local.set({ custom_midterm_exams: state.customMidtermExams || [] }, resolve);
+    });
+  }
+}
+
+/**
  * Loads exam schedule from FTU Portal (QLDT /#/lichthi endpoints).
  */
 async function loadExamScheduleData(forceRefresh = false, hocKy = null) {
@@ -854,7 +884,10 @@ async function loadExamScheduleData(forceRefresh = false, hocKy = null) {
 
   if (btnRefresh) btnRefresh.disabled = true;
 
-  if (container && (!state.examSchedule || state.examSchedule.length === 0)) {
+  // Always load manual midterm exams from local storage
+  await loadCustomMidtermExams();
+
+  if (container && (!state.examSchedule || state.examSchedule.length === 0) && (!state.customMidtermExams || state.customMidtermExams.length === 0)) {
     container.innerHTML = `
       <div class="empty-state">
         <span class="empty-icon">⏳</span>
@@ -908,26 +941,12 @@ async function loadExamScheduleData(forceRefresh = false, hocKy = null) {
       }
     }
 
-    // Update badge count
-    if (examBadge) {
-      if (state.examSchedule.length > 0) {
-        examBadge.textContent = state.examSchedule.length;
-        examBadge.style.display = 'inline-block';
-      } else {
-        examBadge.style.display = 'none';
-      }
-    }
-
     renderExamCards();
   } catch (err) {
     console.warn('[FTU Sync] Error fetching exam schedule:', err);
     // Fallback: If no exams loaded yet, use default FTU exams
     if (!state.examSchedule || state.examSchedule.length === 0) {
       state.examSchedule = generateDefaultFtuExams();
-    }
-    if (examBadge && state.examSchedule.length > 0) {
-      examBadge.textContent = state.examSchedule.length;
-      examBadge.style.display = 'inline-block';
     }
     renderExamCards();
   } finally {
@@ -937,28 +956,42 @@ async function loadExamScheduleData(forceRefresh = false, hocKy = null) {
 
 /**
  * Renders exam cards based on selected filter (all, final, mid).
+ * Merges official portal exams with student-created custom midterm exams.
  */
 function renderExamCards() {
   const container = document.getElementById('exam_cards_container');
   if (!container) return;
 
-  const exams = state.examSchedule || [];
+  const portalExams = state.examSchedule || [];
+  const customExams = state.customMidtermExams || [];
+  const allExams = [...portalExams, ...customExams];
   const filter = state.examFilter || 'all';
 
-  let filtered = exams.slice();
+  let filtered = allExams.slice();
   if (filter === 'final') {
-    filtered = filtered.filter(e => !e.is_giua_ky);
+    filtered = filtered.filter(e => !e.is_giua_ky && !e.is_custom);
   } else if (filter === 'mid') {
-    filtered = filtered.filter(e => Boolean(e.is_giua_ky));
+    filtered = filtered.filter(e => Boolean(e.is_giua_ky || e.is_custom));
   }
 
   // Sort by date ascending, then start time
   filtered.sort((a, b) => {
-    const da = a.iso_date || '';
-    const db = b.iso_date || '';
+    const da = (a.iso_date || a.ngay_thi || '').split('T')[0];
+    const db = (b.iso_date || b.ngay_thi || '').split('T')[0];
     if (da !== db) return da.localeCompare(db);
     return (a.gio_bat_dau || '').localeCompare(b.gio_bat_dau || '');
   });
+
+  // Update badge count
+  const examBadge = document.getElementById('badge_exam_count');
+  if (examBadge) {
+    if (allExams.length > 0) {
+      examBadge.textContent = allExams.length;
+      examBadge.style.display = 'inline-block';
+    } else {
+      examBadge.style.display = 'none';
+    }
+  }
 
   container.innerHTML = '';
 
@@ -979,11 +1012,12 @@ function renderExamCards() {
 }
 
 /**
- * Builds a single Exam Card DOM element with countdown, room, time, and SBD.
+ * Builds a single Exam Card DOM element with countdown, room, time, SBD, and delete action for manual exams.
  */
 function createExamCard(exam) {
   const card = document.createElement('div');
-  const isMid = Boolean(exam.is_giua_ky);
+  const isMid = Boolean(exam.is_giua_ky || exam.is_custom);
+  const isCustom = Boolean(exam.is_custom);
   
   // Calculate relative countdown from today
   const now = new Date();
@@ -992,8 +1026,9 @@ function createExamCard(exam) {
   let isToday = false;
   let isPast = false;
 
-  if (exam.iso_date) {
-    const examDate = new Date(exam.iso_date + 'T00:00:00');
+  const rawDate = (exam.iso_date || exam.ngay_thi || '').split('T')[0];
+  if (rawDate) {
+    const examDate = new Date(rawDate + 'T00:00:00');
     if (!isNaN(examDate.getTime())) {
       const diffMs = examDate.getTime() - now.getTime();
       daysDiff = Math.round(diffMs / (1000 * 60 * 60 * 24));
@@ -1017,9 +1052,8 @@ function createExamCard(exam) {
     statusBadgeHtml = `<span class="exam-status-badge ${colorClass}">${isVi ? `Còn ${daysDiff} ngày` : `In ${daysDiff}d`}</span>`;
   }
 
-  // Room Highlight
   const room = exam.ma_phong || exam.dia_diem_thi || (isVi ? 'Chưa xếp' : 'TBA');
-  const timeStr = `${exam.gio_bat_dau || '--:--'} - ${exam.gio_ket_thuc || '--:--'} (${exam.so_phut || 90}p)`;
+  const timeStr = `${exam.gio_bat_dau || '--:--'} - ${exam.gio_ket_thuc || '--:--'} (${exam.so_phut || 60}p)`;
   const sbdStr = exam.so_bao_danh ? `SBD: <strong>${exam.so_bao_danh}</strong>` : `SBD: --`;
   const toStr = exam.to_thi ? `Tổ: <strong>${exam.to_thi}</strong>` : '';
 
@@ -1028,14 +1062,20 @@ function createExamCard(exam) {
       <span class="exam-date-title">
         📅 ${exam.ngay_thi || exam.iso_date || ''}
       </span>
-      ${statusBadgeHtml}
+      <div style="display:flex; align-items:center; gap:6px;">
+        ${statusBadgeHtml}
+        ${isCustom ? `<button type="button" class="btn-delete-custom-exam" data-exam-id="${exam.id}" title="${isVi ? 'Xóa môn thi thủ công này' : 'Delete custom exam'}" aria-label="Delete">✕</button>` : ''}
+      </div>
     </div>
 
     <div class="exam-subject-row">
-      <span class="exam-subject-code">${exam.ma_mon || 'FTU'}</span>
+      <span class="exam-subject-code">${exam.ma_mon || (isCustom ? 'GK' : 'FTU')}</span>
       <div class="exam-subject-name">
         ${exam.ten_mon || ''}
-        ${isMid ? `<span class="badge badge-amber" style="font-size:9.5px; margin-left:4px;">${isVi ? 'Giữa kỳ' : 'Midterm'}</span>` : ''}
+        ${isCustom 
+          ? `<span class="badge badge-purple" style="font-size:9.5px; margin-left:4px;">${isVi ? 'Giữa kỳ (Thủ công)' : 'Midterm (Manual)'}</span>` 
+          : (isMid ? `<span class="badge badge-amber" style="font-size:9.5px; margin-left:4px;">${isVi ? 'Giữa kỳ' : 'Midterm'}</span>` : '')
+        }
       </div>
     </div>
 
@@ -1057,11 +1097,28 @@ function createExamCard(exam) {
     ${exam.ghi_chu_sv ? `<div class="exam-notes-text">ℹ️ ${exam.ghi_chu_sv}</div>` : ''}
   `;
 
+  if (isCustom) {
+    const delBtn = card.querySelector('.btn-delete-custom-exam');
+    if (delBtn) {
+      delBtn.onclick = async (e) => {
+        e.stopPropagation();
+        const confirmMsg = isVi 
+          ? `Bạn có chắc muốn xóa lịch thi giữa kỳ môn "${exam.ten_mon}"?` 
+          : `Are you sure you want to delete midterm exam "${exam.ten_mon}"?`;
+        if (confirm(confirmMsg)) {
+          state.customMidtermExams = (state.customMidtermExams || []).filter(ex => ex.id !== exam.id);
+          await saveCustomMidtermExams();
+          renderExamCards();
+        }
+      };
+    }
+  }
+
   return card;
 }
 
 /**
- * Handles syncing the Exam Schedule to Google Calendar.
+ * Handles syncing the Exam Schedule to Google Calendar (including manual midterm exams).
  */
 async function handleSyncExamsToCalendar() {
   const btn = document.getElementById('btn_sync_exams_cal');
@@ -1075,7 +1132,10 @@ async function handleSyncExamsToCalendar() {
     return;
   }
 
-  const exams = state.examSchedule || [];
+  const portalExams = state.examSchedule || [];
+  const customExams = state.customMidtermExams || [];
+  const exams = [...portalExams, ...customExams];
+
   if (exams.length === 0) {
     alert(getLang() === 'vi' ? 'Chưa có lịch thi nào để đồng bộ!' : 'No exams available to sync!');
     return;
@@ -1130,6 +1190,17 @@ async function handleSyncExamsToCalendar() {
 }
 
 /**
+ * Updates floating midterm exam button visibility.
+ * Floats on the bottom-right specifically when inside the Exams subview.
+ */
+function updateMidtermFabVisibility() {
+  const btn = document.getElementById('btn_open_add_midterm');
+  if (!btn) return;
+  const isExamsActive = (state.activeView === 'view_schedule' && state.scheduleSubView === 'exams');
+  btn.style.display = isExamsActive ? 'inline-flex' : 'none';
+}
+
+/**
  * Handles Tab Navigation Switching.
  */
 function switchView(viewId) {
@@ -1144,6 +1215,9 @@ function switchView(viewId) {
   document.querySelectorAll('.tab-view').forEach(view => {
     view.classList.toggle('active', view.id === viewId);
   });
+
+  // Update floating action button visibility
+  updateMidtermFabVisibility();
 
   if (viewId === 'view_schedule' && !state.scheduleData) {
     loadScheduleData(false);
@@ -1364,6 +1438,9 @@ function bindUIEvents() {
     if (subWeek) subWeek.style.display = subview === 'week' ? 'block' : 'none';
     if (subExams) subExams.style.display = subview === 'exams' ? 'block' : 'none';
 
+    // Update floating action button visibility
+    updateMidtermFabVisibility();
+
     if (subview === 'day') {
       renderTodayView();
     } else if (subview === 'week') {
@@ -1493,6 +1570,95 @@ function bindUIEvents() {
   const btnSyncExamsCal = document.getElementById('btn_sync_exams_cal');
   if (btnSyncExamsCal) {
     btnSyncExamsCal.onclick = handleSyncExamsToCalendar;
+  }
+
+  // Manual Midterm Exam Modal Wiring (+)
+  const btnOpenMidterm = document.getElementById('btn_open_add_midterm');
+  const modalMidterm = document.getElementById('modal_add_midterm');
+  const btnCloseMidterm = document.getElementById('btn_close_midterm_modal');
+  const btnCloseMidtermDot = document.getElementById('btn_close_midterm_modal_dot');
+  const btnCancelMidterm = document.getElementById('btn_cancel_midterm');
+  const formAddMidterm = document.getElementById('form_add_midterm');
+
+  const openMidtermModal = () => {
+    if (!modalMidterm) return;
+    const dateInput = document.getElementById('input_midterm_date');
+    if (dateInput && !dateInput.value) {
+      // Default to 7 days from today
+      const d = new Date();
+      d.setDate(d.getDate() + 7);
+      const pad = (n) => String(n).padStart(2, '0');
+      dateInput.value = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+    }
+    modalMidterm.style.display = 'flex';
+    document.getElementById('input_midterm_name')?.focus();
+  };
+
+  const closeMidtermModal = () => {
+    if (!modalMidterm) return;
+    modalMidterm.style.display = 'none';
+  };
+
+  if (btnOpenMidterm) btnOpenMidterm.onclick = openMidtermModal;
+  if (btnCloseMidterm) btnCloseMidterm.onclick = closeMidtermModal;
+  if (btnCloseMidtermDot) btnCloseMidtermDot.onclick = closeMidtermModal;
+  if (btnCancelMidterm) btnCancelMidterm.onclick = closeMidtermModal;
+  if (modalMidterm) {
+    modalMidterm.onclick = (e) => {
+      if (e.target === modalMidterm) closeMidtermModal();
+    };
+  }
+
+  if (formAddMidterm) {
+    formAddMidterm.onsubmit = async (e) => {
+      e.preventDefault();
+      const name = document.getElementById('input_midterm_name')?.value.trim();
+      const code = document.getElementById('input_midterm_code')?.value.trim();
+      const type = document.getElementById('select_midterm_type')?.value || 'Thi giữa kỳ';
+      const date = document.getElementById('input_midterm_date')?.value;
+      const time = document.getElementById('input_midterm_time')?.value || '09:00';
+      const room = document.getElementById('input_midterm_room')?.value.trim();
+      const duration = parseInt(document.getElementById('input_midterm_duration')?.value || '60', 10);
+      const notes = document.getElementById('input_midterm_notes')?.value.trim();
+
+      if (!name || !date) {
+        alert(getLang() === 'vi' ? 'Vui lòng nhập Tên môn và Ngày thi!' : 'Please enter Subject name and Exam date!');
+        return;
+      }
+
+      // Compute end time based on start time + duration
+      const [startH, startM] = time.split(':').map(Number);
+      const totalMinutes = (startH * 60) + (startM || 0) + duration;
+      const endH = String(Math.floor(totalMinutes / 60) % 24).padStart(2, '0');
+      const endM = String(totalMinutes % 60).padStart(2, '0');
+      const endTime = `${endH}:${endM}`;
+
+      const newExam = {
+        id: 'custom_mid_' + Date.now(),
+        ten_mon: name,
+        ma_mon: code || 'GK',
+        is_giua_ky: true,
+        is_custom: true,
+        ky_thi: type,
+        iso_date: date,
+        ngay_thi: date,
+        gio_bat_dau: time,
+        gio_ket_thuc: endTime,
+        so_phut: duration,
+        ma_phong: room || 'TBA',
+        dia_diem_thi: room || 'TBA',
+        hinh_thuc_thi: type,
+        ghi_chu_sv: notes || 'Thi giữa kỳ do sinh viên tạo',
+        so_bao_danh: ''
+      };
+
+      if (!state.customMidtermExams) state.customMidtermExams = [];
+      state.customMidtermExams.push(newExam);
+      await saveCustomMidtermExams();
+      closeMidtermModal();
+      formAddMidterm.reset();
+      renderExamCards();
+    };
   }
 
   // Start Sync Action
