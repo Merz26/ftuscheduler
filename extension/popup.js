@@ -220,9 +220,11 @@ function detectWindowMode() {
     document.body.style.height = '100%';
   } else {
     document.documentElement.style.width = '390px';
-    document.documentElement.style.height = '560px';
-    document.body.style.width = '390px';
-    document.body.style.height = '560px';
+    document.documentElement.style.height = '520px';
+    document.documentElement.style.maxHeight = '100vh';
+    document.body.style.width = '100%';
+    document.body.style.height = '100vh';
+    document.body.style.maxHeight = '100vh';
   }
 }
 

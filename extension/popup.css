@@ -38,7 +38,7 @@ body.theme-light {
   --danger-text: #9f1239;
   --card-shadow: 0 1px 3px rgba(0, 0, 0, 0.04), 0 4px 12px rgba(0, 0, 0, 0.02);
   --card-hover-shadow: 0 4px 14px rgba(0, 0, 0, 0.08), 0 1px 3px rgba(0, 0, 0, 0.04);
-  --nav-bg: rgba(255, 255, 255, 0.85);
+  --nav-bg: #ffffff;
   --nav-border: rgba(0, 0, 0, 0.08);
 }
 
@@ -68,7 +68,7 @@ body.theme-dark {
   --danger-text: #fda4af;
   --card-shadow: 0 1px 3px rgba(0, 0, 0, 0.45), 0 4px 12px rgba(0, 0, 0, 0.3);
   --card-hover-shadow: 0 4px 16px rgba(0, 0, 0, 0.55);
-  --nav-bg: rgba(34, 19, 23, 0.88);
+  --nav-bg: #221317;
   --nav-border: rgba(255, 255, 255, 0.1);
 }
 
@@ -80,16 +80,16 @@ body.theme-dark {
 
 html {
   width: 390px;
-  height: 560px;
-  max-height: 560px;
+  height: 520px;
+  max-height: 100vh;
   min-width: 390px;
   box-sizing: border-box;
 }
 
 body {
-  width: 390px;
-  height: 560px;
-  max-height: 560px;
+  width: 100%;
+  height: 100vh;
+  max-height: 100vh;
   min-width: 390px;
   margin: 0 auto;
   padding: 0;
@@ -1490,9 +1490,11 @@ input:checked + .slider:before {
   display: flex;
   align-items: center;
   justify-content: space-around;
-  z-index: 20;
+  z-index: 50;
   width: 100%;
   box-sizing: border-box;
+  margin-top: auto;
+  position: relative;
 }
 
 .nav-btn {
