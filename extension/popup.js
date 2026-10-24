@@ -219,12 +219,12 @@ function detectWindowMode() {
     document.body.style.width = '100%';
     document.body.style.height = '100%';
   } else {
+    document.documentElement.classList.remove('full-window-mode');
+    document.body.classList.remove('full-window-mode');
     document.documentElement.style.width = '390px';
-    document.documentElement.style.height = '520px';
-    document.documentElement.style.maxHeight = '100vh';
-    document.body.style.width = '100%';
-    document.body.style.height = '100vh';
-    document.body.style.maxHeight = '100vh';
+    document.documentElement.style.height = '540px';
+    document.body.style.width = '390px';
+    document.body.style.height = '540px';
   }
 }
 
@@ -1398,9 +1398,9 @@ function bindUIEvents() {
         document.documentElement.classList.remove('full-window-mode');
         document.body.classList.remove('full-window-mode');
         document.documentElement.style.width = '390px';
-        document.documentElement.style.height = '560px';
+        document.documentElement.style.height = '540px';
         document.body.style.width = '390px';
-        document.body.style.height = '560px';
+        document.body.style.height = '540px';
       } else {
         if (typeof chrome !== 'undefined' && chrome.tabs && typeof chrome.tabs.create === 'function') {
           chrome.tabs.create({ url: chrome.runtime.getURL('extension/popup.html?mode=full') });

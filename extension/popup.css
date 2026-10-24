@@ -80,17 +80,17 @@ body.theme-dark {
 
 html {
   width: 390px;
-  height: 520px;
-  max-height: 100vh;
+  height: 540px;
   min-width: 390px;
+  min-height: 540px;
   box-sizing: border-box;
 }
 
 body {
-  width: 100%;
-  height: 100vh;
-  max-height: 100vh;
+  width: 390px;
+  height: 540px;
   min-width: 390px;
+  min-height: 540px;
   margin: 0 auto;
   padding: 0;
   overflow: hidden;
