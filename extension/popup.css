@@ -80,18 +80,16 @@ body.theme-dark {
 
 html {
   width: 390px;
-  height: 580px;
-  min-height: 580px;
-  max-height: 600px;
+  height: 560px;
+  max-height: 560px;
   min-width: 390px;
   box-sizing: border-box;
 }
 
 body {
   width: 390px;
-  height: 580px;
-  min-height: 580px;
-  max-height: 600px;
+  height: 560px;
+  max-height: 560px;
   min-width: 390px;
   margin: 0 auto;
   padding: 0;
@@ -149,7 +147,6 @@ button, [role="button"], .day-accordion-header, .toggle-choice, .icon-action-btn
   display: flex;
   flex-direction: column;
   height: 100%;
-  min-height: 580px;
   max-height: 100%;
   width: 100%;
   overflow: hidden;
@@ -1484,7 +1481,9 @@ input:checked + .slider:before {
 
 /* Bottom Navigation Bar */
 .bottom-nav {
+  flex: 0 0 52px;
   flex-shrink: 0;
+  flex-grow: 0;
   height: 52px;
   background-color: var(--nav-bg);
   border-top: 1px solid var(--nav-border);
@@ -1492,11 +1491,8 @@ input:checked + .slider:before {
   align-items: center;
   justify-content: space-around;
   z-index: 20;
-  position: sticky;
-  bottom: 0;
-  left: 0;
   width: 100%;
-  margin-top: auto;
+  box-sizing: border-box;
 }
 
 .nav-btn {

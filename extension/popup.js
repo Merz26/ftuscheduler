@@ -220,9 +220,9 @@ function detectWindowMode() {
     document.body.style.height = '100%';
   } else {
     document.documentElement.style.width = '390px';
-    document.documentElement.style.height = '580px';
+    document.documentElement.style.height = '560px';
     document.body.style.width = '390px';
-    document.body.style.height = '580px';
+    document.body.style.height = '560px';
   }
 }
 
@@ -1396,9 +1396,9 @@ function bindUIEvents() {
         document.documentElement.classList.remove('full-window-mode');
         document.body.classList.remove('full-window-mode');
         document.documentElement.style.width = '390px';
-        document.documentElement.style.height = '580px';
+        document.documentElement.style.height = '560px';
         document.body.style.width = '390px';
-        document.body.style.height = '580px';
+        document.body.style.height = '560px';
       } else {
         if (typeof chrome !== 'undefined' && chrome.tabs && typeof chrome.tabs.create === 'function') {
           chrome.tabs.create({ url: chrome.runtime.getURL('extension/popup.html?mode=full') });
