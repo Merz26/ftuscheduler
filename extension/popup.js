@@ -1365,7 +1365,7 @@ function setTheme(theme) {
   chrome.storage.local.set({ appTheme: theme });
 
   const icon = document.getElementById('theme_icon');
-  if (icon) icon.textContent = theme === 'dark' ? '☀️' : '🌓';
+  if (icon) icon.textContent = theme === 'dark' ? '🌙' : '☀️';
 
   const btnLight = document.getElementById('btn_theme_light');
   const btnDark = document.getElementById('btn_theme_dark');
