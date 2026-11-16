@@ -56,8 +56,8 @@ export async function calendarApiFetch(url, options = {}) {
         ok: true,
         status: 200,
         json: async () => ({
-          email: googleAccount.email || 'lehoangphuc.contact@gmail.com',
-          name: googleAccount.name || 'Lê Hoàng Phúc',
+          email: googleAccount.email || 'student@ftu.edu.vn',
+          name: googleAccount.name || 'FTU Student',
           picture: null
         })
       };
@@ -69,7 +69,7 @@ export async function calendarApiFetch(url, options = {}) {
       if (typeof localStorage !== 'undefined') {
         try { googleAccount = JSON.parse(localStorage.getItem('googleAccount') || '{}'); } catch(e) {}
       }
-      const email = googleAccount.email || 'lehoangphuc.contact@gmail.com';
+      const email = googleAccount.email || 'student@ftu.edu.vn';
       return {
         ok: true,
         status: 200,

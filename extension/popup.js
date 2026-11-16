@@ -1769,18 +1769,6 @@ function bindUIEvents() {
     btnSaveCreds.onclick = handleSavePortalCreds;
   }
 
-  // Quick fill test credentials button (2415115057 / @NMPKisreal261021)
-  const btnQuickFill = document.getElementById('btn_quick_fill_test_creds');
-  if (btnQuickFill) {
-    btnQuickFill.onclick = async () => {
-      const idInp = document.getElementById('input_student_id');
-      const pwInp = document.getElementById('input_student_password');
-      if (idInp) idInp.value = '2415115057';
-      if (pwInp) pwInp.value = '@NMPKisreal261021';
-      await handleSavePortalCreds();
-    };
-  }
-
   // Diagnostics Pings
   const btnDiagSem = document.getElementById('btn_diag_sem');
   const btnDiagWeek = document.getElementById('btn_diag_week');

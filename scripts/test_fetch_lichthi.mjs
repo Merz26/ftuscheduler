@@ -1,15 +1,20 @@
 /**
  * Test script to fetch Exam Schedule from FTU Student Portal
  * Target URL: https://qldt.hcmc.ftu.edu.vn/#/lichthi
- * 
- * Default Credentials:
- * Student ID: 2415115057
- * Password:   @NMPKisreal261021
+ *
+ * Usage:
+ *   node scripts/test_fetch_lichthi.mjs <STUDENT_ID> <PASSWORD>
+ *   or set FTU_STUDENT_ID and FTU_PASSWORD env vars.
  */
 
 const BASE_URL = process.env.PORTAL_BASE_URL || 'https://qldt.hcmc.ftu.edu.vn';
-const STUDENT_ID = process.argv[2] || '2415115057';
-const PASSWORD = process.argv[3] || '@NMPKisreal261021';
+const STUDENT_ID = process.argv[2] || process.env.FTU_STUDENT_ID || '';
+const PASSWORD = process.argv[3] || process.env.FTU_PASSWORD || '';
+
+if (!STUDENT_ID || !PASSWORD) {
+  console.error('Usage: node scripts/test_fetch_lichthi.mjs <STUDENT_ID> <PASSWORD>');
+  process.exit(1);
+}
 
 console.log('====================================================');
 console.log('FTU PORTAL EXAM SCHEDULE FETCHER (/#/lichthi)');

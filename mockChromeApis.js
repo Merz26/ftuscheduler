@@ -27,7 +27,7 @@
   const mockRuntime = {
     __isMock: true,
     getManifest: () => ({
-      version: '1.4.8',
+      version: '1.5.0',
       oauth2: {
         client_id: '1068393903577-5g3l76neofv7fgdtkshfpcqcf9rprh1n.apps.googleusercontent.com',
         scopes: [
@@ -196,11 +196,11 @@
           </p>
           <div style="margin-bottom:12px;">
             <label style="display:block; font-size:11px; font-weight:600; text-transform:uppercase; color:#6b7280; margin-bottom:4px;">Gmail Address</label>
-            <input type="email" id="modal_google_email" value="lehoangphuc.contact@gmail.com" style="width:100%; box-sizing:border-box; padding:8px 10px; border:1px solid #d1d5db; border-radius:6px; font-size:13px;" />
+            <input type="email" id="modal_google_email" value="student@ftu.edu.vn" style="width:100%; box-sizing:border-box; padding:8px 10px; border:1px solid #d1d5db; border-radius:6px; font-size:13px;" />
           </div>
           <div style="margin-bottom:14px;">
             <label style="display:block; font-size:11px; font-weight:600; text-transform:uppercase; color:#6b7280; margin-bottom:4px;">Display Name</label>
-            <input type="text" id="modal_google_name" value="Lê Hoàng Phúc" style="width:100%; box-sizing:border-box; padding:8px 10px; border:1px solid #d1d5db; border-radius:6px; font-size:13px;" />
+            <input type="text" id="modal_google_name" value="FTU Student" style="width:100%; box-sizing:border-box; padding:8px 10px; border:1px solid #d1d5db; border-radius:6px; font-size:13px;" />
           </div>
           <div style="display:flex; flex-direction:column; gap:8px;">
             <button id="modal_btn_confirm" style="background:#dc2626; color:white; border:none; padding:9px 12px; border-radius:6px; font-weight:600; font-size:13px; cursor:pointer;">
@@ -217,7 +217,7 @@
       target.appendChild(modal);
 
       modal.querySelector('#modal_btn_confirm').onclick = () => {
-        const email = modal.querySelector('#modal_google_email').value.trim() || 'lehoangphuc.contact@gmail.com';
+        const email = modal.querySelector('#modal_google_email').value.trim() || 'student@ftu.edu.vn';
         const name = modal.querySelector('#modal_google_name').value.trim() || 'Google User';
         const fakeToken = 'ya29.studio_' + btoa(email) + '_' + Date.now();
         
