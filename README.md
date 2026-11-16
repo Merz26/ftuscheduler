@@ -2,6 +2,12 @@
 
 Tiện ích mở rộng trình duyệt hoàn toàn miễn phí, xử lý phía client để đồng bộ lịch học FTU với Google Calendar mà không phụ thuộc vào bất kỳ máy chủ bên thứ ba nào.
 
+## Ảnh extension
+<img width="329" height="455" alt="image" src="https://github.com/user-attachments/assets/54a9f5fd-0af0-47ef-9129-a4faa04992c1" /> <img width="329" height="455" alt="image" src="https://github.com/user-attachments/assets/c9ff43e8-932c-4fe5-b2f5-5a865d17cf1b" />
+
+<img width="329" height="455" alt="image" src="https://github.com/user-attachments/assets/538816d6-f8cb-4676-a297-61f557ed9a1e" /> <img width="329" height="455" alt="image" src="https://github.com/user-attachments/assets/27f14fda-8800-4622-a577-266c6fe21c2b" />
+
+
 ## Cài đặt
 
 1. Tải về hoặc clone repository dưới dạng tệp `.zip`.
